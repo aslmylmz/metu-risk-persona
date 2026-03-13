@@ -88,7 +88,7 @@ def preprocess(filepath: str):
 
 # ── Optimal K ────────────────────────────────────────────────────────────
 
-def find_optimal_k(X, k_range=range(2, 7)):
+def find_optimal_k(X, k_range=range(2, 4)):
     inertias, silhouettes = [], {}
     for k in k_range:
         km = KMeans(n_clusters=k, n_init=20, random_state=42, max_iter=2000)

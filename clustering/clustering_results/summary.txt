@@ -1,0 +1,49 @@
+METU Risk Persona — Clustering Summary
+==================================================
+
+Algorithm: K-Means
+Optimal k: 3 (by silhouette)
+Silhouette: 0.1964
+
+  k=2: 0.1655
+  k=3: 0.1964 <- best
+
+Cluster sizes:
+  Cluster 0: n=18 (30.0%)
+  Cluster 1: n=23 (38.3%)
+  Cluster 2: n=19 (31.7%)
+
+Top features per cluster (|z| > 0.3):
+
+  Cluster 0:
+    ↑ bart_rng_normalized_pumps: z=1.28
+    ↑ bart_risk_sensitivity: z=0.44
+    ↓ bart_patience_normalized: z=-0.32
+
+  Cluster 1:
+    ↓ bart_rng_normalized_pumps: z=-0.73
+    ↓ bart_patience_normalized: z=-0.69
+    ↓ bart_impulsivity_index: z=-0.40
+
+  Cluster 2:
+    ↑ bart_patience_normalized: z=1.14
+    ↑ bart_impulsivity_index: z=0.42
+    ↓ bart_rng_normalized_pumps: z=-0.33
+
+PCA loadings:
+
+  PC1:
+    + bart_risk_sensitivity: 0.724
+    + bart_rng_normalized_pumps: 0.489
+    + bart_impulsivity_index: 0.400
+    - bart_patience_normalized: -0.269
+    + dospert_financial: 0.060
+
+  PC2:
+    + dospert_financial: 0.647
+    - bart_patience_normalized: -0.617
+    - bart_impulsivity_index: -0.446
+    - bart_risk_sensitivity: -0.033
+    - bart_rng_normalized_pumps: -0.006
+
+Nominal distributions:
