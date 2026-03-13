@@ -1,0 +1,1220 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{graphicx}
+
+% ── Colors ────────────────────────────────────────────────────────────────
+\definecolor{codebackground}{HTML}{F5F5F5}
+\definecolor{codekeyword}{HTML}{005CC5}
+\definecolor{codecomment}{HTML}{6A737D}
+\definecolor{codestring}{HTML}{032F62}
+\definecolor{purpleballoon}{HTML}{A855F7}
+\definecolor{tealballoon}{HTML}{14B8A6}
+\definecolor{orangeballoon}{HTML}{F97316}
+
+% ── Hyperref setup ────────────────────────────────────────────────────────
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+    citecolor=blue!60!black,
+    bookmarksdepth=3
+}
+
+% ── Listings style ────────────────────────────────────────────────────────
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    backgroundcolor=\color{codebackground},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{codekeyword}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{black!20},
+    xleftmargin=1em,
+    xrightmargin=1em,
+    aboveskip=1em,
+    belowskip=1em,
+    showstringspaces=false,
+    columns=flexible,
+    morekeywords={np,stats,float,int,dict,list,tuple,bool,defaultdict}
+}
+
+\lstdefinestyle{tsstyle}{
+    language=Java,
+    backgroundcolor=\color{codebackground},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{codekeyword}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{black!20},
+    xleftmargin=1em,
+    xrightmargin=1em,
+    aboveskip=1em,
+    belowskip=1em,
+    showstringspaces=false,
+    columns=flexible,
+    morekeywords={const,let,Math,if,return}
+}
+
+\lstdefinestyle{jsonstyle}{
+    backgroundcolor=\color{codebackground},
+    basicstyle=\ttfamily\scriptsize,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{black!20},
+    xleftmargin=1em,
+    xrightmargin=1em,
+    aboveskip=1em,
+    belowskip=1em,
+    showstringspaces=false,
+    columns=flexible
+}
+
+% ── Header / Footer ──────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small BART Metrics Reference --- Full Technical Documentation}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Title ─────────────────────────────────────────────────────────────────
+\title{\textbf{BART Metrics Reference}\\[0.3em]
+\large Full Technical Documentation}
+\author{Ahmet Selim Yılmaz}
+\date{}
+
+% ══════════════════════════════════════════════════════════════════════════
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\tableofcontents
+\newpage
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Explosion Model}
+% ──────────────────────────────────────────────────────────────────────────
+
+Unlike the original Lejuez et al.\ (2002) task --- which pre-draws a single breakpoint
+uniformly at random and pops the balloon deterministically when it is reached --- our
+variant uses a \textbf{sequential independent Bernoulli model}.
+At each pump attempt $k$ the balloon explodes with probability
+
+\begin{equation}
+\label{eq:explosion}
+P(\text{explode at pump } k) = \frac{k}{\texttt{maxPumps}}\,.
+\end{equation}
+
+In the client this looks like:
+
+\begin{lstlisting}[style=tsstyle,caption={Explosion check (TypeScript, client-side).}]
+const newPumps = currentBalloon.pumps + 1;
+const explosionProbability = newPumps / maxPumps;
+const explode = newPumps >= maxPumps
+             || Math.random() < explosionProbability;
+\end{lstlisting}
+
+Two consequences are worth highlighting.
+First, there is no predetermined breakpoint --- every pump is a genuinely stochastic
+event, and the balloon always pops at \texttt{maxPumps}.
+Second, the EV-optimal stopping point sits well below $\texttt{maxPumps}/2$:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Color} & \textbf{Hex} & \textbf{\texttt{maxPumps}} & \textbf{Risk Level} & \textbf{EV-Optimal Stop} \\
+\midrule
+\textcolor{purpleballoon}{Purple} & \texttt{\#A855F7} & 128 & Low    & ${\sim}\,32$ pumps \\
+\textcolor{tealballoon}{Teal}     & \texttt{\#14B8A6} & 32  & Medium & ${\sim}\,8$ pumps  \\
+\textcolor{orangeballoon}{Orange} & \texttt{\#F97316} & 8   & High   & ${\sim}\,2$ pumps  \\
+\bottomrule
+\end{tabular}
+\caption{Balloon color profiles. Neutral colors were chosen deliberately to
+avoid triggering common psychological associations (e.g.\ red\,$=$\,danger).}
+\end{table}
+
+\subsection{Session Generation}
+
+Every session presents exactly 30 balloons --- 10 of each color --- shuffled with
+Fisher--Yates so the participant cannot predict the sequence:
+
+\begin{lstlisting}[style=tsstyle,caption={Shuffle logic (TypeScript).}]
+["ORANGE", "TEAL", "PURPLE"].forEach((type) => {
+    const profile = RISK_PROFILES[type];
+    for (let i = 0; i < 10; i++)
+        configs.push({ id: 0, color: profile.color,
+                       maxPumps: profile.maxPumps });
+});
+for (let i = configs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [configs[i], configs[j]] = [configs[j], configs[i]];
+}
+\end{lstlisting}
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Raw Event Data Format}
+% ──────────────────────────────────────────────────────────────────────────
+
+The client records every action as a timestamped JSON object.
+Timestamps come from \texttt{performance.now()} (monotonic, sub-millisecond),
+not \texttt{Date.now()}, to avoid wall-clock jumps.
+Each event has three fields: \texttt{type}, \texttt{timestamp}, and \texttt{payload}.
+
+\begin{lstlisting}[style=jsonstyle,caption={A few raw events from the sample session (\texttt{6fe2f79a}).}]
+{"type":"pump",   "timestamp":36678.70, "payload":{"color":"purple","balloon_id":1}}
+{"type":"pump",   "timestamp":37262.10, "payload":{"color":"purple","balloon_id":1}}
+  ...  (4 more pumps)
+{"type":"collect","timestamp":40844.90, "payload":{"color":"purple","balloon_id":1}}
+{"type":"pump",   "timestamp":42964.50, "payload":{"color":"teal",  "balloon_id":2}}
+{"type":"pump",   "timestamp":43418.00, "payload":{"color":"teal",  "balloon_id":2}}
+{"type":"pump",   "timestamp":43836.20, "payload":{"color":"teal",  "balloon_id":2}}
+{"type":"explode","timestamp":43836.30, "payload":{"color":"teal",  "balloon_id":2,
+                                                    "pump_count":3}}
+\end{lstlisting}
+
+The scoring engine starts by splitting this flat list into per-balloon groups ---
+a new group begins after every \texttt{collect} or \texttt{explode}:
+
+\begin{lstlisting}[style=pythonstyle,caption={Balloon segmentation (Python).}]
+def _segment_balloons(events):
+    balloons, current = [], []
+    for event in events:
+        current.append(event)
+        if event.type in ("collect", "explode"):
+            balloons.append(current)
+            current = []
+    if current:
+        balloons.append(current)
+    return balloons
+\end{lstlisting}
+
+For the sample session this yields 30 balloon segments: 10~purple, 10~teal,
+10~orange.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Handling Right-Censored Data}
+% ──────────────────────────────────────────────────────────────────────────
+
+When a balloon explodes the pump count is cut short --- the participant may well
+have intended to keep pumping.  This is a textbook right-censoring problem, and
+ignoring it biases every mean downward.
+
+\textbf{A concrete example.} In the sample session all 10 orange balloons exploded.
+Their observed counts ($1, 4, 5, 4, 4, 4, 2, 2, 1$) average $2.9$, but
+those numbers reflect where the RNG happened to terminate the trial, not the
+participant's chosen stopping rule.  Without a single collected orange balloon
+we simply cannot recover the true intention.
+
+The fix is straightforward: wherever we need a measure of \emph{what the participant
+chose to do}, we restrict the calculation to \textbf{collected (non-exploded)
+balloons}.  A small helper manages this, falling back to all balloons (with a
+warning) when fewer than two collected trials are available for a given color:
+
+\begin{lstlisting}[style=pythonstyle,caption={Collected-preference helper (Python).}]
+MIN_COLLECTED_FALLBACK = 2
+
+def _prefer_collected(collected, all_data, min_count=2):
+    if len(collected) >= min_count:
+        return collected, False      # use collected
+    return all_data, True            # fallback + warning
+\end{lstlisting}
+
+For orange this fallback fires routinely --- $P(\text{survive 4 pumps on orange})
+\approx 16\%$, so most sessions have very few (sometimes zero) collected orange
+balloons.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Overall Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+\subsection{\texttt{average\_pumps\_adjusted}}
+
+The classic Lejuez ``adjusted'' BART score: mean pump count across collected
+balloons only.
+
+\begin{lstlisting}[style=pythonstyle]
+non_exploded_pumps = []
+for balloon_events in balloons:
+    pumps = sum(1 for e in balloon_events if e.type == "pump")
+    terminal = next(
+        (e.type for e in reversed(balloon_events)
+         if e.type in ("collect", "explode")), None)
+    if terminal != "explode":
+        non_exploded_pumps.append(pumps)
+
+average_pumps_adjusted = (np.mean(non_exploded_pumps)
+                          if non_exploded_pumps
+                          else np.mean(all_pumps))
+\end{lstlisting}
+
+Range: $[0,\, 128]$.  In the sample session 10~balloons were collected with counts
+$\{6, 5, 5, 11, 7, 3, 21, 5, 3\}$, giving $\texttt{average\_pumps\_adjusted} = 7.2$.
+
+One important caveat: this number is colour-blind.  A participant who pumps
+$5\times$ on every colour looks the same as one who pumps $20\times$ on purple
+and $1\times$ on orange.  For colour-aware alternatives see
+\texttt{rng\_normalized\_pumps} (\S\ref{sec:rng_norm}) or
+\texttt{risk\_adjustment\_score} (\S\ref{sec:risk_adj}).
+
+
+\subsection{\texttt{avg\_pumps\_all\_balloons}}
+
+Plain mean across every balloon regardless of outcome:
+
+\begin{equation}
+    \texttt{avg\_pumps\_all\_balloons} = \frac{1}{N}\sum_{i=1}^{N} \text{pumps}_i
+\end{equation}
+
+Sample session: $168 / 30 = 5.6$.  Useful for comparisons with other BART studies
+that report the unadjusted mean, but it understates behavioural intention because
+exploded balloons have truncated counts.
+
+
+\subsection{\texttt{explosion\_rate}}
+
+Simply the fraction of balloons that popped:
+
+\begin{equation}
+    \texttt{explosion\_rate} = \frac{\texttt{total\_explosions}}{\texttt{total\_balloons}}
+\end{equation}
+
+Sample session: $20/30 = 0.667$.  Worth remembering that two people playing exactly
+the same strategy can end up with noticeably different explosion rates on any given
+run due to the stochastic nature of the task.
+
+
+\subsection{\texttt{mean\_latency\_between\_pumps}}
+
+Average milliseconds between consecutive pumps \emph{within} the same balloon.
+Cross-balloon gaps (e.g.\ time spent deciding to start a new balloon) are excluded,
+and any intra-balloon pause longer than 2\,s is filtered as an outlier.
+
+\begin{lstlisting}[style=pythonstyle]
+all_intra_latencies = []
+for balloon_events in balloons:
+    pump_times = [e.timestamp for e in balloon_events
+                  if e.type == "pump"]
+    if len(pump_times) >= 2:
+        diffs = np.diff(pump_times)
+        all_intra_latencies.extend(diffs.tolist())
+
+latencies = np.array(all_intra_latencies)
+latencies = latencies[latencies < 2000.0]
+mean_latency = np.mean(latencies)
+\end{lstlisting}
+
+To make this concrete, here are the inter-pump intervals for balloon~1
+(purple, collected at 6~pumps):
+\begin{align*}
+\text{Timestamps} &= [36678.7,\; 37262.1,\; 38028.8,\; 38628.6,\; 39362.1,\; 40012.1] \\
+\text{Diffs (ms)} &= [583.4,\; 766.7,\; 599.8,\; 733.5,\; 650.0]
+\end{align*}
+Those five intervals enter the global pool.  Across all 30 balloons the session-level
+mean is $555.4$\,ms --- on the deliberate side (fast/impulsive pumpers tend to sit
+around ${\sim}200$\,ms).
+
+
+\subsection{Session-Level Counts}
+
+\texttt{total\_balloons}, \texttt{total\_pumps}, \texttt{total\_explosions}, and
+\texttt{total\_collections} are straightforward aggregations.  They should always
+satisfy
+
+\begin{equation}
+    \texttt{total\_explosions} + \texttt{total\_collections} = \texttt{total\_balloons}
+\end{equation}
+
+Sample session: $20 + 10 = 30$\;\checkmark.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Per-Colour Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+For each colour we emit a \texttt{ColorMetrics} object.  Colour is read from the
+event payload (defaulting to teal if absent):
+
+\begin{lstlisting}[style=pythonstyle]
+def _extract_balloon_color(balloon_events):
+    for event in balloon_events:
+        if hasattr(event.payload, "color") and event.payload.color:
+            return event.payload.color.lower()
+    return "teal"
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lp{8.5cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+\texttt{color}                  & \texttt{"purple"}, \texttt{"teal"}, or \texttt{"orange"} \\
+\texttt{average\_pumps}         & Mean pumps across \emph{all} balloons of this colour \\
+\texttt{behavioral\_avg\_pumps} & Mean pumps from collected balloons only (falls back to all if $< 2$ collected) \\
+\texttt{explosion\_rate}        & Colour-specific explosion rate \\
+\texttt{total\_balloons}        & Count of balloons of this colour (expected: 10) \\
+\texttt{collected\_count}       & How many survived to collection \\
+\texttt{risk\_profile}          & \texttt{"low"} / \texttt{"medium"} / \texttt{"high"} \\
+\texttt{used\_fallback}         & True when \texttt{behavioral\_avg\_pumps} had to fall back \\
+\bottomrule
+\end{tabular}
+\caption{Fields in the per-colour \texttt{ColorMetrics} object.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Colour} & \textbf{Balloons} & \textbf{Collected} & \textbf{Avg Pumps (all)} & \textbf{Explosion Rate} & \textbf{Fallback?} \\
+\midrule
+Purple & 10 & 5 & 9.9  & 0.50 & No \\
+Teal   & 10 & 5 & 4.0  & 0.50 & No \\
+Orange & 10 & 0 & 2.9  & 1.00 & Yes \\
+\bottomrule
+\end{tabular}
+\caption{Colour breakdown for the sample session.  The gap between
+\texttt{behavioral\_avg\_pumps} and \texttt{average\_pumps} gets wider as the
+explosion rate increases --- orange being the most extreme case.}
+\end{table}
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Behavioural Intention Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+These metrics all aim to capture what the participant \emph{intended} to do, so they
+operate on collected balloons wherever possible.
+
+\subsection{\texttt{rng\_normalized\_pumps}}
+\label{sec:rng_norm}
+
+Our primary risk measure.  For every collected balloon we divide pump count by the
+colour's capacity, then average:
+
+\begin{equation}
+    \texttt{rng\_normalized\_pumps} = \frac{1}{|\mathcal{C}|}\sum_{b \in \mathcal{C}}
+        \frac{\text{pumps}_b}{\text{maxPumps}_{\text{colour}(b)}}
+\end{equation}
+
+\begin{lstlisting}[style=pythonstyle]
+normalized = []
+for color, pumps_list in color_pumps_behavioral.items():
+    cap = COLOR_PROFILES[color]["max_pumps"]
+    for p in pumps_list:
+        normalized.append(p / cap)
+
+rng_normalized_pumps = np.mean(normalized)
+\end{lstlisting}
+
+Range $[0, 1]$.  A value of $0.25$ means the participant used roughly a quarter
+of each balloon's capacity on average.  Because the normalisation removes the scale
+difference between colours ($128$ vs $32$ vs $8$), this metric is directly comparable
+across risk levels --- something \texttt{average\_pumps\_adjusted} cannot offer.
+
+
+\subsection{\texttt{impulsivity\_index}}
+
+Focuses on orange balloons specifically.  We take the mean collected-orange pump
+count and normalise by the orange ceiling~(8):
+
+\begin{equation}
+    \texttt{impulsivity\_index} = \text{clip}\!\left(
+        \frac{\text{mean}(\text{collected\_orange\_pumps})}{8},\; 0,\; 1\right)
+\end{equation}
+
+\begin{lstlisting}[style=pythonstyle]
+orange_behavioral = color_pumps_behavioral.get("orange", [])
+orange_avg = np.mean(orange_behavioral) if orange_behavioral else 0.0
+impulsivity_index = np.clip(orange_avg / 8.0, 0.0, 1.0)
+\end{lstlisting}
+
+Because collected orange balloons are rare ($P(\text{survive 4 pumps}) \approx 16\%$),
+each one carries a lot of signal.  A score of $0.5$ means the participant was pushing
+to half of orange's capacity --- well past the EV-optimal stopping point of ${\sim}2$.
+
+In the sample session every orange balloon exploded, so the fallback kicked in:
+$2.9 / 8 = 0.36$.
+(The value of $1.0$ in the attached JSON comes from an older formula based on
+explosion counts; the current definition is the one above.)
+
+
+\subsection{\texttt{patience\_index} and \texttt{patience\_index\_normalized}}
+
+The mirror image of impulsivity: mean pump count on collected purple balloons,
+where risk is low and the optimal strategy is to pump aggressively.
+
+\begin{align}
+    \texttt{patience\_index} &= \text{mean}(\text{collected\_purple\_pumps}) \\[2pt]
+    \texttt{patience\_index\_normalized} &= \text{clip}\!\left(
+        \frac{\texttt{patience\_index}}{128},\; 0,\; 1\right)
+\end{align}
+
+Sample session: $9.9$ (raw), $0.077$ (normalised) --- the participant was nowhere
+near exploiting the full safety margin that purple balloons offer.
+
+
+\subsection{\texttt{orange\_avg\_pumps}}
+
+Simply the raw version of \texttt{impulsivity\_index} before normalisation ($[0, 8]$).
+Sometimes easier to reason about clinically: ``the participant pumped an average of
+4~times on the high-risk balloons.''
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Learning \& Adaptation Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+Both metrics in this section try to answer the same question --- \emph{did the
+participant get better over time?} --- but they approach it differently.
+
+\subsection{\texttt{learning\_rate}}
+
+Fits a simple OLS regression of pump count on trial number, separately per colour,
+using collected balloons.  The slope is weighted by~$R^2$ so that noisy fits count
+for less.  Directionality is colour-dependent: pumping \emph{more} on purple over
+time is adaptive, while pumping \emph{less} on orange is.
+
+\begin{lstlisting}[style=pythonstyle,caption={Regression-based learning rate (Python).}]
+for color in color_trials_all:
+    collected = color_trials_collected.get(color, [])
+    all_t = color_trials_all[color]
+    trials = collected if len(collected) >= 2 else all_t
+    if len(trials) < 2:
+        continue
+
+    xs = np.array([t[0] for t in trials])
+    ys = np.array([t[1] for t in trials])
+    slope, _, r_value, _, _ = stats.linregress(xs, ys)
+    weighted = slope * (r_value ** 2)
+
+    if color == "orange":
+        learning_slopes.append(-weighted)
+    elif color == "purple":
+        learning_slopes.append(weighted)
+    else:                          # teal: half-weight
+        learning_slopes.append(-weighted * 0.5)
+
+learning_rate = np.clip(np.mean(learning_slopes), -1.0, 1.0)
+\end{lstlisting}
+
+Range $[-1, 1]$.  Sample session: $0.059$.
+
+The main weakness is sample size.  With only 10 trials per colour --- and often
+fewer collected --- a single outlier can swing the regression substantially.
+
+
+\subsection{\texttt{half\_split\_learning\_rate}}
+
+A more robust alternative that sidesteps the regression entirely.  For each colour
+the collected trials are sorted chronologically and split in half; we then look at
+the relative change:
+
+\begin{equation}
+    \delta_\text{colour} = \frac{\bar{x}_{\text{2nd half}} - \bar{x}_{\text{1st half}}}
+                                {\bar{x}_{\text{overall}}}
+\end{equation}
+
+\begin{lstlisting}[style=pythonstyle,caption={Half-split learning rate (Python).}]
+for color in color_trials_all:
+    trials = collected if len(collected) >= 4 else all_trials
+    if len(trials) < 4:
+        continue
+
+    sorted_t = sorted(trials, key=lambda x: x[0])
+    half = len(sorted_t) // 2
+    m1 = np.mean([t[1] for t in sorted_t[:half]])
+    m2 = np.mean([t[1] for t in sorted_t[half:]])
+    m  = np.mean([t[1] for t in sorted_t])
+    if m == 0:
+        continue
+
+    delta = (m2 - m1) / m
+    if color == "orange":
+        scores.append(-delta)
+    elif color == "purple":
+        scores.append(delta)
+    else:
+        scores.append(-delta * 0.5)
+
+half_split_lr = np.clip(np.mean(scores), -1.0, 1.0)
+\end{lstlisting}
+
+A value of $0.2$ means behaviour improved by roughly 20\% across the session.
+Because it compares group means rather than fitting a line through a handful of
+points, it is much less sensitive to individual outlier trials.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Risk Calibration Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+\subsection{\texttt{color\_discrimination\_index}}
+
+Measures how clearly the participant distinguished between the safest colour
+(purple) and the most dangerous one (orange), expressed as a normalised
+Cohen's~$d$:
+
+\begin{equation}
+    d = \frac{\bar{x}_{\text{purple}} - \bar{x}_{\text{orange}}}
+             {s_{\text{pooled}}}
+    \;,\qquad
+    s_{\text{pooled}} = \sqrt{\frac{s^2_{\text{purple}} + s^2_{\text{orange}}}{2}}
+\end{equation}
+
+\begin{equation}
+    \texttt{color\_discrimination\_index} = \text{clip}\!\left(\frac{d}{2},\; 0,\; 1\right)
+\end{equation}
+
+\begin{lstlisting}[style=pythonstyle]
+purple_arr = np.array(color_pumps["purple"])
+orange_arr = np.array(color_pumps["orange"])
+
+mean_diff  = np.mean(purple_arr) - np.mean(orange_arr)
+pooled_std = np.sqrt(
+    (np.var(purple_arr, ddof=1) + np.var(orange_arr, ddof=1)) / 2)
+
+if pooled_std == 0:
+    return 1.0 if mean_diff > 0 else 0.0
+
+cohens_d = mean_diff / pooled_std
+discrimination = np.clip(cohens_d / 2.0, 0.0, 1.0)
+\end{lstlisting}
+
+We chose Cohen's~$d$ over a $t$-test because effect sizes are sample-size invariant,
+which matters a lot when $N$ per colour can be as low as 2.
+
+Sample session: $0.833$ --- the participant clearly pumped more on purple than
+on orange.
+
+
+\subsection{\texttt{risk\_sensitivity}}
+
+Takes a different angle: Pearson~$r$ between each balloon's capacity
+($128$/$32$/$8$) and the participant's actual pump count on that balloon.
+This tells us whether the participant scaled their behaviour proportionally to
+the available headroom.
+
+\begin{lstlisting}[style=pythonstyle]
+capacities, pumps = [], []
+for color, ps in color_pumps.items():
+    cap = COLOR_PROFILES[color]["max_pumps"]
+    for p in ps:
+        capacities.append(cap)
+        pumps.append(p)
+
+r, _ = stats.pearsonr(capacities, pumps)
+\end{lstlisting}
+
+$r > 0.7$ indicates strong sensitivity; $r \approx 0$ a flat strategy; $r < 0$
+would be unusual (pumping \emph{more} on dangerous balloons).  Sample session:
+$r = 0.678$.
+
+One caveat: a genuinely flat but deliberate strategy also produces $r \approx 0$,
+so a low value is ambiguous on its own.  Cross-referencing with
+\texttt{color\_discrimination\_index} helps disambiguate.
+
+
+\subsection{\texttt{risk\_adjustment\_score}}
+\label{sec:risk_adj}
+
+Asks a slightly different question: not ``did you differentiate?'' but ``did you
+pump the \emph{right amount} for each colour?''  Each colour is scored against
+its EV-optimal region, and the three scores are averaged:
+
+\begin{align}
+    \text{Purple score}  &= \text{clip}\!\left(\frac{\bar{x}_\text{purple}}{128},\; 0,\; 1\right) \times 100
+    &\quad&\text{(more pumps\,$=$\,better)} \\[4pt]
+    \text{Orange score}  &= \text{clip}\!\left(1 - \frac{\bar{x}_\text{orange}}{8},\; 0,\; 1\right) \times 100
+    &\quad&\text{(fewer pumps\,$=$\,better)} \\[4pt]
+    \text{Teal score}    &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{teal} - 8|}{16},\; 0,\; 1\right) \times 100
+    &\quad&\text{(closer to 8\,$=$\,better)}
+\end{align}
+
+\begin{lstlisting}[style=pythonstyle]
+scores = []
+if "purple" in cp and cp["purple"]:
+    scores.append(np.clip(np.mean(cp["purple"]) / 128, 0, 1) * 100)
+if "orange" in cp and cp["orange"]:
+    scores.append(np.clip(1 - np.mean(cp["orange"]) / 8, 0, 1) * 100)
+if "teal" in cp and cp["teal"]:
+    d = abs(np.mean(cp["teal"]) - 8.0)
+    scores.append(np.clip(1 - d / 16, 0, 1) * 100)
+
+risk_adjustment_score = np.mean(scores)
+\end{lstlisting}
+
+Range $[0, 100]$.  This is the single best ``risk intelligence'' number because it
+penalises both over-pumping on dangerous balloons \emph{and} under-pumping on safe
+ones.  It replaced \texttt{explosion\_rate} in the reflection pipeline for exactly
+this reason: it reflects what the participant chose, not what the dice rolled.
+
+Sample session: $32.2$ --- below average calibration, driven mainly by low
+exploitation of purple's headroom.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Consistency Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+\subsection{\texttt{response\_consistency}}
+
+Global coefficient of variation across every intra-pump latency in the session:
+
+\begin{equation}
+    \text{CV}_\text{global} = \frac{\sigma(\text{all\_latencies})}{\mu(\text{all\_latencies})}
+\end{equation}
+
+Sample session: $1.204$.  On its own this is hard to interpret because it mixes
+two very different sources of variability --- motor jitter within a balloon and
+strategic tempo shifts between balloons.  The decomposition below is more useful.
+
+
+\subsection{\texttt{within\_balloon\_consistency}}
+
+For each balloon with $\geq 3$ pumps we compute the CV of that balloon's inter-pump
+intervals (filtering out any pauses $> 2$\,s), then average across balloons:
+
+\begin{lstlisting}[style=pythonstyle]
+within_cvs = []
+for balloon_events in balloons:
+    ts = [e.timestamp for e in balloon_events if e.type == "pump"]
+    if len(ts) >= 3:
+        diffs = np.diff(ts)
+        diffs = diffs[diffs < 2000.0]
+        if len(diffs) >= 2 and np.mean(diffs) > 0:
+            within_cvs.append(np.std(diffs) / np.mean(diffs))
+
+within_balloon_cv = np.mean(within_cvs) if within_cvs else 0.0
+\end{lstlisting}
+
+Low values ($< 0.2$) point to steady, rhythmic pumping; high values ($> 0.6$)
+suggest hesitation or attentional lapses mid-balloon.
+
+
+\subsection{\texttt{between\_balloon\_consistency}}
+
+CV of \emph{pump counts} across collected balloons (falling back to all balloons
+if fewer than 5 were collected):
+
+\begin{lstlisting}[style=pythonstyle]
+collected_counts, all_counts = [], []
+for b in balloons:
+    p = sum(1 for e in b if e.type == "pump")
+    all_counts.append(p)
+    terminal = next(
+        (e.type for e in reversed(b)
+         if e.type in ("collect","explode")), None)
+    if terminal != "explode":
+        collected_counts.append(p)
+
+arr = np.array(collected_counts if len(collected_counts) >= 5
+               else all_counts, dtype=np.float64)
+between_cv = np.std(arr) / np.mean(arr)
+\end{lstlisting}
+
+\subsubsection*{Putting them together}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Within CV} & \textbf{Between CV} & \textbf{Interpretation} \\
+\midrule
+Low  & Low  & Highly consistent --- same strategy, steady execution \\
+Low  & High & Strategically variable --- adapts per balloon, but executes cleanly \\
+High & High & Erratic --- inconsistent in both strategy and execution \\
+High & Low  & Attentionally unstable --- one strategy, but shaky execution \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Composite Metrics}
+% ──────────────────────────────────────────────────────────────────────────
+
+\subsection{\texttt{adaptive\_strategy\_score}}
+
+A single number meant to summarise ``behavioural intelligence'' in the task.
+It combines three equally weighted components --- learning, discrimination, and
+calibration --- each contributing up to 33.33 points:
+
+\begin{equation}
+\boxed{
+\texttt{adaptive\_strategy\_score} =
+\underbrace{\frac{\texttt{half\_split\_lr} + 1}{2} \times 33.33}_{\text{Learning}}
+\;+\;
+\underbrace{\texttt{color\_disc} \times 33.33}_{\text{Discrimination}}
+\;+\;
+\underbrace{\frac{\texttt{risk\_adj}}{100} \times 33.33}_{\text{Calibration}}
+}
+\end{equation}
+
+\begin{lstlisting}[style=pythonstyle]
+safe = lambda v: 0.0 if np.isnan(v) else v
+
+adaptive_strategy_score = (
+    (safe(half_split_lr) + 1) / 2 * 33.33
+    + safe(color_discrimination) * 33.33
+    + safe(risk_adjustment) / 100 * 33.33
+)
+adaptive_strategy_score = np.clip(adaptive_strategy_score, 0, 100)
+\end{lstlisting}
+
+We gave each component equal weight because there is no strong theoretical reason
+to privilege one over the others.  In practice a score above $70$ indicates
+someone who learns, differentiates, \emph{and} calibrates well; below~$40$
+usually points to either a flat strategy, poor colour discrimination, or
+performance that got worse over time.
+
+Sample session: $56.1$ --- decent discrimination pulled the score up, but
+weak calibration (especially on purple) held it back.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Session Validation}
+% ──────────────────────────────────────────────────────────────────────────
+
+\subsection{\texttt{session\_valid}}
+
+Before scoring we run five sanity checks:
+
+\begin{enumerate}
+    \item \textbf{Minimum balloons.}  Fewer than 15 $\to$ invalid outright;
+          15--29 $\to$ warning.
+    \item \textbf{Colour balance.}  Each colour should have ${\sim}10$ balloons;
+          $< 5$ triggers a warning.
+    \item \textbf{Timestamp monotonicity.}  Any $t_i < t_{i-1}$ $\to$ invalid
+          (corrupt data).
+    \item \textbf{Session speed.}  Under 30\,s for $\geq 15$ balloons is suspiciously
+          fast.
+    \item \textbf{Pump uniformity.}  If
+          $\text{std}(\text{pump\_counts}) < 0.5$ across $\geq 10$ balloons, the
+          session likely came from a bot or an auto-clicker.
+\end{enumerate}
+
+\begin{lstlisting}[style=pythonstyle,caption={Bot-detection heuristic (Python).}]
+pump_counts = [sum(1 for e in b if e.type == "pump")
+               for b in balloons]
+if len(pump_counts) >= 10 and float(np.std(pump_counts)) < 0.5:
+    warnings.append(
+        "Suspicious: nearly identical pump counts "
+        "across all balloons")
+\end{lstlisting}
+
+\subsection{\texttt{session\_warnings}}
+
+A list that accumulates messages from both the validation step and any data-quality
+fallbacks that fire during scoring.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Behavioural Profile (Narrative)}
+% ──────────────────────────────────────────────────────────────────────────
+
+After the numbers are computed we also generate a short narrative profile,
+primarily for the participant-facing reflection screen.
+
+\subsection{\texttt{risk\_style}}
+
+One of four archetypes, assigned by simple threshold logic:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lp{5.5cm}p{5cm}@{}}
+\toprule
+\textbf{Style} & \textbf{When it fires} & \textbf{Description} \\
+\midrule
+High-Stakes Risk Taker   & \texttt{rng\_normalized} $> 0.45$ & Pushes limits to the maximum \\
+Conservative Safety-Seeker & \texttt{rng\_normalized} $< 0.10$ \textbf{and} \texttt{avg\_adj} $< 10$ & Prioritises safety above all \\
+Strategic Risk Taker      & \texttt{risk\_sensitivity} $> 0.7$ & Takes calculated risks only when favourable \\
+Balanced Explorer         & default & Healthy mix of caution and exploration \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Sample session: \emph{High-Stakes Risk Taker}.
+
+
+\subsection{\texttt{dominant\_traits}}
+
+Additional trait labels, each gated by a single threshold:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lp{7.5cm}@{}}
+\toprule
+\textbf{Trait} & \textbf{Condition} \\
+\midrule
+Highly Consistent       & within\_CV $< 0.2$ \textbf{and} between\_CV $< 0.4$ \\
+Erratic (within-balloon)& within\_CV $> 0.6$ \\
+Strategically Variable  & between\_CV $> 1.0$ \\
+Adaptive Learner        & \texttt{half\_split\_lr} $> 0.1$ \\
+Risk-Averse Learner     & \texttt{half\_split\_lr} $< -0.1$ \\
+Impulsive               & \texttt{orange\_avg\_pumps} $> 4.0$ \\
+Patient Optimizer       & \texttt{patience\_index} $> 40$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Sample session: \emph{Variable/Erratic}, \emph{Impulsive}.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Metric Classification Table}
+\label{sec:classification}
+% ──────────────────────────────────────────────────────────────────────────
+
+\begin{small}
+\begin{longtable}{@{}lllc@{}}
+\toprule
+\textbf{Metric} & \textbf{Type} & \textbf{Data Source} & \textbf{Used in Clustering} \\
+\midrule
+\endhead
+\texttt{average\_pumps\_adjusted}     & Descriptive & Collected only     & No \\
+\texttt{avg\_pumps\_all\_balloons}    & Descriptive & All balloons       & No \\
+\texttt{explosion\_rate}              & Outcome     & All balloons       & No \\
+\texttt{mean\_latency\_between\_pumps}& Temporal    & All balloons       & No \\
+\texttt{rng\_normalized\_pumps}       & Behavioural & Collected only     & Yes \\
+\texttt{impulsivity\_index}           & Behavioural & Collected orange   & Yes \\
+\texttt{patience\_index\_normalized}  & Behavioural & Collected purple   & Yes \\
+\texttt{orange\_avg\_pumps}           & Behavioural & Collected orange   & No \\
+\texttt{patience\_index}              & Behavioural & Collected purple   & No \\
+\texttt{learning\_rate}               & Adaptation  & Collected / colour & No \\
+\texttt{half\_split\_learning\_rate}  & Adaptation  & Collected / colour & No \\
+\texttt{color\_discrimination\_index} & Calibration & Collected / colour & No \\
+\texttt{risk\_sensitivity}            & Calibration & Collected / colour & Yes \\
+\texttt{risk\_adjustment\_score}      & Calibration & Collected / colour & No \\
+\texttt{response\_consistency}        & Temporal    & All latencies      & No \\
+\texttt{within\_balloon\_consistency} & Temporal    & Per-balloon lat.   & No \\
+\texttt{between\_balloon\_consistency}& Strategic   & Collected counts   & No \\
+\texttt{adaptive\_strategy\_score}    & Composite   & All collected      & No \\
+\texttt{session\_valid}               & Validation  & All events         & No \\
+\bottomrule
+\end{longtable}
+\end{small}
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{K-Means Clustering Pipeline}
+\label{sec:clustering}
+% ──────────────────────────────────────────────────────────────────────────
+
+\textbf{Important caveat.}  The results in this section come from a pilot
+sample of $N = 12$ participants.  We expect to collect 50--80 participants by the
+end of the experiment, at which point the feature set, the number of clusters, and
+the profile interpretations will almost certainly change.  What follows is the
+current state of the pipeline and its preliminary output --- not a final result.
+
+\subsection{Feature Horizon}
+
+For the pilot run we narrowed the input to five features that seemed to separate
+participants most cleanly at this sample size:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Feature} & \textbf{Source} & \textbf{What it captures} \\
+\midrule
+\texttt{dospert\_financial}           & DOSPERT-30 & Self-reported willingness to take financial risks \\
+\texttt{bart\_risk\_sensitivity}      & BART       & Pearson $r$ between balloon capacity and pumping behaviour \\
+\texttt{bart\_patience\_normalized}   & BART       & Purple (safe) balloon exploitation, normalised to $[0,1]$ \\
+\texttt{bart\_impulsivity\_index}     & BART       & Orange (dangerous) balloon pumping, normalised to $[0,1]$ \\
+\texttt{bart\_rng\_normalized\_pumps} & BART       & Capacity-normalised pumping intention across all colours \\
+\bottomrule
+\end{tabular}
+\caption{Features used in the pilot clustering run.  This set will likely expand
+once more participants are collected.}
+\end{table}
+
+
+\subsection{Preprocessing}
+
+Every feature is standardised to zero mean and unit variance before clustering:
+
+\begin{lstlisting}[style=pythonstyle,caption={Preprocessing (Python).}]
+from sklearn.preprocessing import StandardScaler
+
+# Drop participant_id, keep only clustering features
+df_numeric = df_work[CONTINUOUS_COLS].copy()
+
+scaler = StandardScaler()
+df_scaled = pd.DataFrame(
+    scaler.fit_transform(df_numeric),
+    columns=df_numeric.columns,
+    index=df_numeric.index,
+)
+\end{lstlisting}
+
+We also run a quick correlation check and flag any pairs with $|r| > 0.70$
+to catch redundancy before it distorts the distance metric.
+
+
+\subsection{Choosing $k$: Elbow and Silhouette}
+
+We sweep $k \in \{2, 3, 4, 5, 6\}$ and evaluate each solution by inertia
+(within-cluster sum of squares) and silhouette score:
+
+\begin{lstlisting}[style=pythonstyle,caption={$k$-selection loop (Python).}]
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+inertias, silhouettes = [], {}
+for k in range(2, 7):
+    km = KMeans(n_clusters=k, n_init=20, random_state=42,
+                max_iter=2000)
+    labels = km.fit_predict(X)
+    inertias.append(km.inertia_)
+    silhouettes[k] = silhouette_score(X, labels)
+
+best_k = max(silhouettes, key=silhouettes.get)
+\end{lstlisting}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{01_k_selection.png}
+\caption{Elbow plot (left) and silhouette scores (right) for $k = 2 \ldots 6$.
+The pilot data favour $k = 2$ with a silhouette of $0.343$.  The elbow curve
+does not show a sharp bend, which is expected at $N = 12$ --- there simply
+are not enough points to carve out more than two regions cleanly.}
+\label{fig:k_selection}
+\end{figure}
+
+
+\subsection{Cluster Profiles}
+
+With $k = 2$ selected, we fit the final model and inspect the $z$-scored centroid
+deviations from the overall sample mean:
+
+\begin{lstlisting}[style=pythonstyle,caption={Profile computation (Python).}]
+km = KMeans(n_clusters=best_k, n_init=20, random_state=42)
+labels = km.fit_predict(df_scaled.values)
+
+centroids = df.groupby("cluster")[features].mean()
+z_centroids = (centroids - df[features].mean()) / df[features].std()
+\end{lstlisting}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{02_cluster_profiles.png}
+\caption{Heatmap of cluster centroids expressed as $z$-scores.  Cluster~0
+(``risk-engaged'') sits above the mean on every feature; Cluster~1
+(``risk-averse'') mirrors it below.  The strongest separator is
+\texttt{bart\_patience\_normalized} ($z = \pm 0.82$), followed by
+\texttt{bart\_rng\_normalized\_pumps} ($\pm 0.71$).}
+\label{fig:profiles}
+\end{figure}
+
+Both clusters contain exactly 6 participants.  The profile is strikingly symmetric
+--- Cluster~0 is above the global mean on every feature, Cluster~1 below it ---
+which is typical when $k = 2$ on a small, roughly Gaussian sample.  The main
+takeaway at this stage is that the split is being driven primarily by BART patience
+and overall capacity usage, with DOSPERT financial risk riding along in the same
+direction.
+
+
+\subsection{PCA Projection}
+
+To visualise how well the two clusters separate in reduced space, we project
+the standardised features onto their first two principal components:
+
+\begin{lstlisting}[style=pythonstyle,caption={PCA projection (Python).}]
+from sklearn.decomposition import PCA
+
+pca = PCA(n_components=2)
+X_2d = pca.fit_transform(df_scaled.values)
+# PC1: 52.7% variance, PC2: 27.7% (80.4% total)
+\end{lstlisting}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{03_pca_projection.png}
+\caption{PCA projection of the 12 pilot participants.  PC1 (52.7\% variance)
+separates the two clusters cleanly along the left--right axis.  PC2 (27.7\%)
+captures remaining within-cluster spread, mostly driven by
+\texttt{bart\_impulsivity\_index} (loading $= 0.778$).}
+\label{fig:pca}
+\end{figure}
+
+The PCA loadings confirm the story from the heatmap:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Feature} & \textbf{PC1} & \textbf{PC2} \\
+\midrule
+\texttt{bart\_patience\_normalized}   & $+0.556$ & $-0.169$ \\
+\texttt{bart\_rng\_normalized\_pumps} & $+0.542$ & $+0.196$ \\
+\texttt{bart\_risk\_sensitivity}      & $+0.450$ & $-0.527$ \\
+\texttt{dospert\_financial}           & $+0.406$ & $+0.225$ \\
+\texttt{bart\_impulsivity\_index}     & $+0.172$ & $+0.778$ \\
+\bottomrule
+\end{tabular}
+\caption{PCA loadings.  PC1 is a general ``risk engagement'' axis --- all features
+load positively.  PC2 picks up a contrast between impulsivity (positive) and
+risk sensitivity (negative), which is interesting: some participants score high
+on impulsivity without being particularly risk-\emph{sensitive}.}
+\end{table}
+
+Together the first two components explain $80.4\%$ of the total variance, which is
+reasonable for five input features.
+
+
+\subsection{What Changes at Scale}
+
+With 50--80 participants we expect several things to shift:
+
+\begin{itemize}
+    \item \textbf{More clusters.}  The $k = 2$ solution is almost certainly a
+          side-effect of sample size.  With more data we would hope to see at
+          least 3--4 distinct personas (e.g.\ separating ``impulsive risk-taker''
+          from ``patient strategist'' from ``cautious across the board'').
+    \item \textbf{Wider feature set.}  We plan to reintroduce
+          \texttt{bart\_mean\_latency}, \texttt{bart\_between\_consistency}, and
+          \texttt{bart\_adaptive\_strategy} once the sample is large enough for
+          them to contribute meaningfully.  Additional DOSPERT subscales
+          (health/safety, recreational, ethical, social) may also enter.
+    \item \textbf{Demographics.}  Binary and nominal demographic variables
+          (gender, dorm status, employment, prior task experience) are currently
+          excluded from clustering but will be tested as candidate features or
+          used for post-hoc profiling.
+    \item \textbf{Validation.}  At larger $N$ we can run stability checks
+          (bootstrap resampling, split-half consistency) and compare silhouette
+          scores more meaningfully.
+\end{itemize}
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Appendix: Sample Session Walkthrough}
+% ──────────────────────────────────────────────────────────────────────────
+
+Session~\texttt{6fe2f79a-0135-4850-9a5c-f0969be6088c}.
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}clccc@{}}
+\toprule
+\textbf{\#} & \textbf{Colour} & \textbf{Pumps} & \textbf{Outcome} & \textbf{Notes} \\
+\midrule
+ 1 & \textcolor{purpleballoon}{Purple} &  6 & Collected & \\
+ 2 & \textcolor{tealballoon}{Teal}     &  3 & Exploded  & \\
+ 3 & \textcolor{tealballoon}{Teal}     &  4 & Exploded  & \\
+ 4 & \textcolor{tealballoon}{Teal}     &  5 & Collected & \\
+ 5 & \textcolor{purpleballoon}{Purple} &  5 & Exploded  & \\
+ 6 & \textcolor{purpleballoon}{Purple} &  3 & Exploded  & \\
+ 7 & \textcolor{orangeballoon}{Orange} &  1 & Exploded  & first-pump pop \\
+ 8 & \textcolor{orangeballoon}{Orange} &  4 & Exploded  & \\
+ 9 & \textcolor{purpleballoon}{Purple} &  6 & Collected & \\
+10 & \textcolor{orangeballoon}{Orange} &  5 & Exploded  & \\
+11 & \textcolor{tealballoon}{Teal}     &  5 & Collected & \\
+12 & \textcolor{purpleballoon}{Purple} & 11 & Collected & \\
+13 & \textcolor{tealballoon}{Teal}     &  4 & Exploded  & \\
+14 & \textcolor{purpleballoon}{Purple} &  7 & Collected & \\
+15 & \textcolor{tealballoon}{Teal}     &  3 & Collected & \\
+16 & \textcolor{purpleballoon}{Purple} & 21 & Collected & session high \\
+17 & \textcolor{tealballoon}{Teal}     &  2 & Exploded  & \\
+18 & \textcolor{orangeballoon}{Orange} &  2 & Exploded  & \\
+19 & \textcolor{orangeballoon}{Orange} &  4 & Exploded  & \\
+20 & \textcolor{purpleballoon}{Purple} & 15 & Exploded  & \\
+21 & \textcolor{tealballoon}{Teal}     &  6 & Exploded  & \\
+22 & \textcolor{orangeballoon}{Orange} &  4 & Exploded  & \\
+23 & \textcolor{purpleballoon}{Purple} & 16 & Exploded  & \\
+24 & \textcolor{orangeballoon}{Orange} &  4 & Exploded  & \\
+25 & \textcolor{tealballoon}{Teal}     &  5 & Collected & \\
+26 & \textcolor{purpleballoon}{Purple} &  9 & Exploded  & \\
+27 & \textcolor{orangeballoon}{Orange} &  2 & Exploded  & \\
+28 & \textcolor{orangeballoon}{Orange} &  2 & Exploded  & \\
+29 & \textcolor{tealballoon}{Teal}     &  3 & Collected & \\
+30 & \textcolor{orangeballoon}{Orange} &  1 & Exploded  & first-pump pop \\
+\bottomrule
+\end{tabular}
+\caption{Complete balloon-by-balloon breakdown.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+\texttt{total\_balloons}               & 30 \\
+\texttt{total\_pumps}                  & 168 \\
+\texttt{total\_explosions}             & 20 \\
+\texttt{total\_collections}            & 10 \\
+\texttt{average\_pumps\_adjusted}      & 7.20 \\
+\texttt{explosion\_rate}               & 0.667 \\
+\texttt{mean\_latency\_between\_pumps} & 555.4\,ms \\
+\texttt{learning\_rate}                & 0.059 \\
+\texttt{risk\_adjustment\_score}       & 32.2 \\
+\texttt{color\_discrimination\_index}  & 0.833 \\
+\texttt{risk\_sensitivity}             & 0.678 \\
+\texttt{adaptive\_strategy\_score}     & 56.1 \\
+\texttt{response\_consistency}         & 1.204 \\
+\texttt{patience\_index}               & 9.9 \\
+\texttt{risk\_style}                   & High-Stakes Risk Taker \\
+\texttt{dominant\_traits}              & Variable/Erratic, Impulsive \\
+\bottomrule
+\end{tabular}
+\caption{Scored output for the sample session.}
+\end{table}
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section*{References}
+% ──────────────────────────────────────────────────────────────────────────
+
+\begin{itemize}
+
+    \item Blais, A.-R.\ \& Weber, E.U.\ (2006).
+        A Domain-Specific Risk-Taking (DOSPERT) scale for adult populations.
+        \textit{Judgment and Decision Making}, 1(2), 33--47.
+
+    \item Din\c{c}, S.C.\ \& Yava\c{s} Tez, \"O.\ (2019).
+        Alana \"ozg\"u risk alma \"ol\c{c}e\u{g}i --- k{\i}sa formu'nun
+        (DOSPERT-30) T\"urk\c{c}eye uyarlama \c{c}al{\i}\c{s}mas{\i}
+        [The adaptation study into Turkish of the Domain-Specific Risk-Taking
+        Scale --- Short Form (DOSPERT-30)].
+        \textit{Spor Bilimleri Dergisi}, 30(3), 107--120.
+        \url{https://doi.org/10.17644/sbd.471304}
+
+    \item Lejuez, C.W., Read, J.P., Kahler, C.W., et al.\ (2002).
+        Evaluation of a behavioral measure of risk taking: The Balloon Analogue
+        Risk Task (BART). \textit{Journal of Experimental Psychology: Applied},
+        8(2), 75--84.
+
+    \item Weber, E.U., Blais, A.-R., \& Betz, N.E.\ (2002).
+        A domain-specific risk-attitude scale: Measuring risk perceptions and
+        risk behaviors. \textit{Journal of Behavioral Decision Making}, 15(4),
+        263--290.
+
+\end{itemize}
+
+
+\end{document}

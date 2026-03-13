@@ -1,0 +1,36 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+venv/
+.venv/
+
+# ── Node ──────────────────────────────────────────────────────────────────
+node_modules/
+.next/
+dist/
+
+# ── Data (real participant data is NEVER committed) ───────────────────────
+data/raw/
+data/participants/
+*.csv
+# Allow synthetic data directory
+!data/synthetic/
+!data/synthetic/**
+
+# ── OS ────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── LaTeX build artifacts ─────────────────────────────────────────────────
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
