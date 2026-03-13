@@ -1,8 +1,7 @@
 """
-METU Risk Persona — K-Means Clustering Pipeline (v3)
+METU Risk Persona — K-Means Clustering Pipeline
 ====================================================
-Features: Demographics + DOSPERT-30 + BART (no behavioral inventory).
-
+Features: Demographics + DOSPERT-30 + BART
 Usage:
   python clustering_pipeline.py --data participants.csv
   python clustering_pipeline.py --data synthetic_metu_60.csv --output results/
