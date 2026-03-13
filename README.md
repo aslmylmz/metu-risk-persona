@@ -93,9 +93,9 @@ The clustering pipeline operates on six behavioural features extracted from BART
 
 - Lejuez, C. W., Read, J. P., Kahler, C. W., Richards, J. B., Ramsey, S. E., Stuart, G. L., Strong, D. R., & Brown, R. A. (2002). Evaluation of a behavioral measure of risk taking: The Balloon Analogue Risk Task (BART). *Journal of Experimental Psychology: Applied*, 8(2), 75--84.
 
-- Blais, A.-R., & Weber, E. U. (2006). A Domain-Specific Risk-Taking (DOSPERT) scale for adult populations. *Judgment and Decision Making*, 1(1), 33--47.
+- Blais, A.-R., & Weber, E. U. (2006). A Domain-Specific Risk-Taking (DOSPERT) scale for adult populations. *Judgment and Decision Making*, 1(2), 33--47.
 
-- Dinc, H., & Yavas Tez, O. (2019). Alana Ozgu Risk Alma Olcegi-Kisa Formu'nun (DOSPERT-30) Turkceye uyarlanmasi. *Sosyal Bilimler Dergisi*, 6(40), 108--128. https://doi.org/10.17644/sbd.471304
+- Dinc, S.C., & Yavas Tez, Ö. (2019). Alana Ozgu Risk Alma Olcegi-Kisa Formu'nun (DOSPERT-30) Turkceye uyarlanmasi. *Spor Bilimleri Dergisi*, 30(3), 107--120. https://doi.org/10.17644/sbd.471304
 
 ---
 
