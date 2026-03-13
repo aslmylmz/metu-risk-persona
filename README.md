@@ -111,10 +111,10 @@ If you use this platform in your research, please cite:
 
 ```bibtex
 @software{yilmaz2026meturiskpersona,
-  author    = {Yilmaz, A.S.},
+  author    = {YILMAZ, A.Selim},
   title     = {METU Risk Persona: A Multi-Risk BART Platform for Behavioural Assessment},
   year      = {2026},
-  url       = {https://github.com/ahmetselimyilmaz/metu-risk-persona},
+  url       = {https://github.com/aslmylmz/metu-risk-persona},
   note      = {Open-source software}
 }
 ```
