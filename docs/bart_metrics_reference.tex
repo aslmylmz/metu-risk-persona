@@ -149,8 +149,8 @@ to be well below $\texttt{maxPumps}/2$:
 \toprule
 \textbf{Color} & \textbf{Hex} & \textbf{\texttt{maxPumps}} & \textbf{Risk Level} & \textbf{EV-Optimal Stop} \\
 \midrule
-\textcolor{purpleballoon}{Purple} & \texttt{\#A855F7} & 128 & Low    & ${\sim}\,32$ pumps \\
-\textcolor{tealballoon}{Teal}     & \texttt{\#14B8A6} & 32  & Medium & ${\sim}\,8$ pumps  \\
+\textcolor{purpleballoon}{Purple} & \texttt{\#A855F7} & 128 & Low    & ${\sim}\,12$ pumps \\
+\textcolor{tealballoon}{Teal}     & \texttt{\#14B8A6} & 32  & Medium & ${\sim}\,6$ pumps  \\
 \textcolor{orangeballoon}{Orange} & \texttt{\#F97316} & 8   & High   & ${\sim}\,2$ pumps  \\
 \bottomrule
 \end{tabular}
@@ -665,31 +665,36 @@ not to differentiate.
 \subsection{\texttt{risk\_adjustment\_score}}
 \label{sec:risk_adj}
 
-Where the previous two metrics ask ``did you differentiate?'', this one
-asks ``did you pump the \emph{right amount} for each color?''
-We score each color against its EV-optimal region and then average the
-three scores together:
+Asks a slightly different question: not ``did you differentiate?'' but ``did you
+pump the \emph{right amount} for each colour?''  Each colour is scored based on
+its absolute distance from the EV-optimal point, and the three scores are averaged:
 
 \begin{align}
-    \text{Purple score}  &= \text{clip}\!\left(\frac{\bar{x}_\text{purple}}{128},\; 0,\; 1\right) \times 100
-    &\quad&\text{(more pumps\,$=$\,better)} \\[4pt]
-    \text{Orange score}  &= \text{clip}\!\left(1 - \frac{\bar{x}_\text{orange}}{8},\; 0,\; 1\right) \times 100
-    &\quad&\text{(fewer pumps\,$=$\,better)} \\[4pt]
-    \text{Teal score}    &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{teal} - 8|}{16},\; 0,\; 1\right) \times 100
-    &\quad&\text{(closer to 8\,$=$\,better)}
+    \text{Purple score}  &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{purple} - 12|}{116},\; 0,\; 1\right) \times 100
+    &\quad&\text{(closer to 12\,$=$\,better)} \\[4pt]
+    \text{Orange score}  &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{orange} - 2|}{6},\; 0,\; 1\right) \times 100
+    &\quad&\text{(closer to 2\,$=$\,better)} \\[4pt]
+    \text{Teal score}    &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{teal} - 6|}{26},\; 0,\; 1\right) \times 100
+    &\quad&\text{(closer to 6\,$=$\,better)}
 \end{align}
 
 \begin{lstlisting}[style=pythonstyle]
+optimal_stops = {"purple": 12.0, "teal": 6.0, "orange": 2.0}
+max_pumps_caps = {"purple": 128, "teal": 32, "orange": 8}
 scores = []
-if "purple" in cp and cp["purple"]:
-    scores.append(np.clip(np.mean(cp["purple"]) / 128, 0, 1) * 100)
-if "orange" in cp and cp["orange"]:
-    scores.append(np.clip(1 - np.mean(cp["orange"]) / 8, 0, 1) * 100)
-if "teal" in cp and cp["teal"]:
-    d = abs(np.mean(cp["teal"]) - 8.0)
-    scores.append(np.clip(1 - d / 16, 0, 1) * 100)
 
-risk_adjustment_score = np.mean(scores)
+for color in ["purple", "teal", "orange"]:
+    if color in cp and len(cp[color]) > 0:
+        mean_pumps = np.mean(cp[color])
+        opt = optimal_stops[color]
+        mx = max_pumps_caps[color]
+        
+        # Max possible distance from optimal
+        max_dist = max(opt, mx - opt)
+        score = np.clip(1.0 - abs(mean_pumps - opt) / max_dist, 0.0, 1.0) * 100.0
+        scores.append(score)
+
+risk_adjustment_score = np.mean(scores) if scores else 0.0
 \end{lstlisting}
 
 The range is $[0, 100]$. In our view, this is the single best ``risk

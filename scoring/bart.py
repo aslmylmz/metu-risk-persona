@@ -19,7 +19,8 @@ Explosion model (frontend):
     (sequential independent Bernoulli trials with linearly increasing probability).
     This is NOT a pre-drawn uniform distribution — the optimal stopping point under
     this model is lower than maxPumps / 2.  For orange (N=8) the EV-maximising
-    stop is ~2 pumps; for teal (N=32) ~8 pumps; for purple (N=128) ~32 pumps.
+    stop is ~2 pumps; for teal (N=32) ~6 pumps; for purple (N=128) ~12 pumps.
+    The true peaks of the EV curves are actually close to the square root of N.
 
 RNG-Truncation Robustness:
     All behavioral-intention metrics use COLLECTED (non-exploded) balloons only.
@@ -518,43 +519,34 @@ def _calculate_risk_adjustment_score(
 
     Ideal behavior under the sequential Bernoulli explosion model
     (P(explode at pump k) = k / maxPumps):
-    - Purple (N=128): EV-optimal ~ 32 pumps. Higher pumps -> higher score.
-    - Teal   (N=32):  EV-optimal ~ 8 pumps.  Scored by proximity to 8.
-    - Orange (N=8):   EV-optimal ~ 2 pumps.  Lower pumps -> higher score.
+    - Purple (N=128): EV-optimal ~ 12.0 pumps.
+    - Teal   (N=32):  EV-optimal ~ 6.0 pumps.
+    - Orange (N=8):   EV-optimal ~ 2.0 pumps.
 
-    Note: The optimal points above are approximations under the Bernoulli model.
-    The score rewards directionally correct behavior (more pumps on safer colors,
-    fewer on riskier colors) and does not assume a fixed optimal point.
+    Note: The score evaluates the absolute distance from the EV-optimal point,
+    scaled linearly down to 0 at the extreme distances (0 or max_pumps).
 
     Returns
     -------
     float
         Risk adjustment score (0-100). 100 = optimal risk calibration.
     """
+    optimal_stops = {"purple": 12.0, "teal": 6.0, "orange": 2.0}
+    max_pumps_caps = {"purple": 128, "teal": 32, "orange": 8}
     scores = []
 
-    # Purple balloons: reward high pumps (safe = pump more)
-    if "purple" in color_pumps and color_pumps["purple"]:
-        purple_mean = np.mean(color_pumps["purple"])
-        # Normalize: 0 pumps -> 0, 128 pumps -> 100
-        purple_score = float(np.clip(purple_mean / 128.0, 0.0, 1.0) * 100)
-        scores.append(purple_score)
-
-    # Orange balloons: reward low pumps (risky = pump less)
-    if "orange" in color_pumps and color_pumps["orange"]:
-        orange_mean = np.mean(color_pumps["orange"])
-        # Normalize: 0 pumps -> 100, 8 pumps -> 0
-        orange_score = float(np.clip(1.0 - (orange_mean / 8.0), 0.0, 1.0) * 100)
-        scores.append(orange_score)
-
-    # Teal balloons: reward proximity to the EV-optimal region (~8 pumps for N=32)
-    # Scored by distance from 8 (optimal), capped at the half-range of 16.
-    if "teal" in color_pumps and color_pumps["teal"]:
-        teal_mean = np.mean(color_pumps["teal"])
-        teal_optimal = 8.0  # EV-optimal under sequential Bernoulli (N=32)
-        teal_distance = abs(teal_mean - teal_optimal)
-        teal_score = float(np.clip(1.0 - (teal_distance / 16.0), 0.0, 1.0) * 100)
-        scores.append(teal_score)
+    for color in ["purple", "teal", "orange"]:
+        if color in color_pumps and len(color_pumps[color]) > 0:
+            mean_pumps = np.mean(color_pumps[color])
+            opt = optimal_stops[color]
+            mx = max_pumps_caps[color]
+            
+            # Max possible distance from optimal (either down to 0, or up to max_pumps)
+            max_dist = max(opt, mx - opt)
+            
+            # Score is 100 at optimal, scaling linearly down to 0 at the extremes
+            score = float(np.clip(1.0 - abs(mean_pumps - opt) / max_dist, 0.0, 1.0) * 100.0)
+            scores.append(score)
 
     if not scores:
         return 0.0

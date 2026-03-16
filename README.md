@@ -14,8 +14,8 @@ The task presents participants with 30 balloons (10 per colour, shuffled) drawn 
 
 | Colour | Max Pumps | Risk Tier | Optimal Stop (approx.) |
 |--------|-----------|-----------|------------------------|
-| Purple | 128       | Low       | ~32 pumps              |
-| Teal   | 32        | Medium    | ~8 pumps               |
+| Purple | 128       | Low       | ~12 pumps              |
+| Teal   | 32        | Medium    | ~6 pumps               |
 | Orange | 8         | High      | ~2 pumps               |
 
 Neutral colours are used deliberately to avoid psychological bias (e.g., red = danger).
@@ -28,7 +28,7 @@ Each pump attempt *k* is an independent Bernoulli trial with linearly increasing
 P(explode at pump k) = k / maxPumps
 ```
 
-This is a sequential model, not a pre-drawn uniform threshold. The expected-value-maximising stopping point under this model is approximately `maxPumps / 4`, which differs from the `maxPumps / 2` heuristic of the classic uniform BART.
+This is a sequential model, not a pre-drawn uniform threshold. The expected-value-maximising stopping point under this model is close to `sqrt(maxPumps)`, which differs from the `maxPumps / 2` heuristic of the classic uniform BART.
 
 ### Session Structure
 
