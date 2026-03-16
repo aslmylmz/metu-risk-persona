@@ -476,8 +476,6 @@ capacity, which is already well past the EV-optimal stopping point of around~2.
 
 In the sample session every single orange balloon exploded, so the fallback
 kicked in and we used all orange trials: $2.9 / 8 = 0.36$.
-(The value of $1.0$ that appears in the attached JSON stems from an older formula
-based on explosion counts; the definition above is the current one.)
 
 
 \subsection{\texttt{patience\_index} and \texttt{patience\_index\_normalized}}
@@ -933,7 +931,7 @@ Balanced Explorer         & default & A healthy mix of caution and exploration \
 \end{tabular}
 \end{table}
 
-Sample session: \emph{High-Stakes Risk Taker}.
+Sample session: \emph{Balanced Explorer}.
 
 
 \subsection{\texttt{dominant\_traits}}
@@ -958,7 +956,7 @@ Patient Optimizer       & \texttt{patience\_index} $> 40$ \\
 \end{tabular}
 \end{table}
 
-Sample session: \emph{Variable/Erratic}, \emph{Impulsive}.
+Sample session: \emph{Erratic (within-balloon)}.
 
 
 % ──────────────────────────────────────────────────────────────────────────
@@ -1258,8 +1256,8 @@ Session~\texttt{6fe2f79a-0135-4850-9a5c-f0969be6088c}.
 \texttt{adaptive\_strategy\_score}     & \textbf{76.1} \\
 \texttt{response\_consistency}         & 1.204 \\
 \texttt{patience\_index}               & 10.2 \\
-\texttt{risk\_style}                   & High-Stakes Risk Taker \\
-\texttt{dominant\_traits}              & Variable/Erratic, Impulsive \\
+\texttt{risk\_style}                   & Balanced Explorer \\
+\texttt{dominant\_traits}              & Erratic (within-balloon) \\
 \bottomrule
 \end{tabular}
 \caption{Scored output for the sample session.}
