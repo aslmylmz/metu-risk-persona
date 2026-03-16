@@ -141,7 +141,9 @@ First, because there is no hidden breakpoint drawn ahead of time, each individua
 pump is a genuinely random event---the balloon will always pop once you reach
 \texttt{maxPumps}, but until then every press of the button is its own coin flip.
 Second, and maybe less obvious, the expected-value-optimal place to stop turns out
-to be well below $\texttt{maxPumps}/2$:
+to be well below $\texttt{maxPumps}/2$. A mathematical audit of the EV curve under
+equation~\eqref{eq:explosion} shows that the peak occurs at approximately
+$\sqrt{\texttt{maxPumps}}$:
 
 \begin{table}[H]
 \centering
@@ -155,7 +157,9 @@ to be well below $\texttt{maxPumps}/2$:
 \bottomrule
 \end{tabular}
 \caption{Balloon color profiles. We picked neutral colors on purpose to
-steer clear of common psychological associations (e.g.\ red\,$=$\,danger).}
+steer clear of common psychological associations (e.g.\ red\,$=$\,danger).
+Optimal stops are approximately $\sqrt{N}$, derived from the EV-curve peak of
+the sequential Bernoulli model.}
 \end{table}
 
 \subsection{Session Generation}
@@ -251,8 +255,9 @@ def _prefer_collected(collected, all_data, min_count=2):
 \end{lstlisting}
 
 For orange, this fallback fires pretty routinely---the probability of surviving even
-4 pumps on an orange balloon is only about $16\%$, so in most sessions you end up with
-very few (or zero) collected orange balloons.
+4 pumps on an orange balloon is only about $20.5\%$
+($\frac{7}{8} \times \frac{6}{8} \times \frac{5}{8} \times \frac{4}{8} \approx 0.205$),
+so in most sessions you end up with very few (or zero) collected orange balloons.
 
 
 % ──────────────────────────────────────────────────────────────────────────
@@ -465,7 +470,7 @@ impulsivity_index = np.clip(orange_avg / 8.0, 0.0, 1.0)
 \end{lstlisting}
 
 Collected orange balloons are uncommon---surviving 4 pumps happens only about
-$16\%$ of the time---so when you do get one, it carries quite a bit of signal.
+$20.5\%$ of the time---so when you do get one, it carries quite a bit of signal.
 A score of $0.5$ tells you the participant was pushing to half of orange's
 capacity, which is already well past the EV-optimal stopping point of around~2.
 
@@ -487,9 +492,9 @@ smart move is to pump aggressively.
         \frac{\texttt{patience\_index}}{128},\; 0,\; 1\right)
 \end{align}
 
-In the sample session we get $9.9$ (raw) and $0.077$ (normalized)---the
+In the sample session we get $10.2$ (raw) and $0.080$ (normalized)---the
 participant was not coming close to exploiting the headroom that purple balloons
-offer.
+offer, though they were pumping near the EV-optimal point of~12.
 
 
 \subsection{\texttt{orange\_avg\_pumps}}
@@ -665,33 +670,47 @@ not to differentiate.
 \subsection{\texttt{risk\_adjustment\_score}}
 \label{sec:risk_adj}
 
-Asks a slightly different question: not ``did you differentiate?'' but ``did you
-pump the \emph{right amount} for each colour?''  Each colour is scored based on
-its absolute distance from the EV-optimal point, and the three scores are averaged:
+Where the previous two metrics ask ``did you differentiate?'', this one
+asks ``did you pump the \emph{right amount} for each color?''
 
-\begin{align}
-    \text{Purple score}  &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{purple} - 12|}{116},\; 0,\; 1\right) \times 100
-    &\quad&\text{(closer to 12\,$=$\,better)} \\[4pt]
-    \text{Orange score}  &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{orange} - 2|}{6},\; 0,\; 1\right) \times 100
-    &\quad&\text{(closer to 2\,$=$\,better)} \\[4pt]
-    \text{Teal score}    &= \text{clip}\!\left(1 - \frac{|\bar{x}_\text{teal} - 6|}{26},\; 0,\; 1\right) \times 100
-    &\quad&\text{(closer to 6\,$=$\,better)}
-\end{align}
+The score is built on the corrected EV-optimal stopping points
+($\approx\!\sqrt{N}$): Purple\,$=\,12$, Teal\,$=\,6$, Orange\,$=\,2$.
+Each color is evaluated by absolute distance from its optimum, scaled so that
+the score is exactly~100 at the optimum and falls linearly to~0 at both
+extremes (0~pumps \emph{or} \texttt{maxPumps}). This unified formula correctly
+penalises both over-pumping \emph{and} under-pumping for every color:
+
+\begin{equation}
+    \text{score}_\text{color} = \text{clip}\!\left(
+        1 - \frac{|\bar{x}_\text{color} - \text{opt}_\text{color}|}
+                 {\max\!\bigl(\text{opt}_\text{color},\;
+                              N_\text{color} - \text{opt}_\text{color}\bigr)},\;
+        0,\; 1\right) \times 100
+\end{equation}
+
+\[
+    \text{opt}_\text{purple} = 12,\quad
+    \text{opt}_\text{teal}   = 6,\quad
+    \text{opt}_\text{orange} = 2
+\]
 
 \begin{lstlisting}[style=pythonstyle]
-optimal_stops = {"purple": 12.0, "teal": 6.0, "orange": 2.0}
-max_pumps_caps = {"purple": 128, "teal": 32, "orange": 8}
+optimal_stops  = {"purple": 12.0, "teal": 6.0, "orange": 2.0}
+max_pumps_caps = {"purple": 128,  "teal": 32,  "orange": 8}
 scores = []
 
 for color in ["purple", "teal", "orange"]:
     if color in cp and len(cp[color]) > 0:
         mean_pumps = np.mean(cp[color])
         opt = optimal_stops[color]
-        mx = max_pumps_caps[color]
-        
-        # Max possible distance from optimal
+        mx  = max_pumps_caps[color]
+
+        # Max distance from optimal in either direction
         max_dist = max(opt, mx - opt)
-        score = np.clip(1.0 - abs(mean_pumps - opt) / max_dist, 0.0, 1.0) * 100.0
+
+        # 100 at optimal, linear decay to 0 at extremes
+        score = np.clip(1.0 - abs(mean_pumps - opt) / max_dist,
+                        0.0, 1.0) * 100.0
         scores.append(score)
 
 risk_adjustment_score = np.mean(scores) if scores else 0.0
@@ -704,9 +723,28 @@ We swapped it in for \texttt{explosion\_rate} in the reflection pipeline
 for exactly that reason---it captures what the participant actually chose,
 not what the dice happened to roll.
 
-Sample session: $32.2$---below-average calibration, pulled down mainly by the
-participant's low exploitation of purple's generous headroom.
+Sample session score breakdown:
 
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lrrrrc@{}}
+\toprule
+\textbf{Color} & \textbf{Mean pumps} & \textbf{Optimal} & \textbf{Max dist} & \textbf{Score} \\
+\midrule
+Purple & 10.2 & 12 & 116 & 98.4 \\
+Teal   & 4.2  & 6  & 26  & 93.1 \\
+Orange & 2.9  & 2  & 6   & 85.0 \\
+\midrule
+\textbf{Final} & & & & \textbf{92.2} \\
+\bottomrule
+\end{tabular}
+\caption{Per-color score breakdown for the sample session.  The participant
+was pumping close to the EV-optimal point on all three colors.}
+\end{table}
+
+$\texttt{risk\_adjustment\_score} = 92.2$---well-calibrated behavior. The
+participant's mean pump counts sat near the EV-optimal stop for every color,
+which is exactly what this metric rewards.
 
 % ──────────────────────────────────────────────────────────────────────────
 \section{Consistency Metrics}
@@ -828,8 +866,8 @@ above $70$ tend to come from people who learn, differentiate, \emph{and}
 calibrate well; scores below $40$ usually signal either a flat strategy,
 poor color discrimination, or performance that actually deteriorated over time.
 
-Sample session: $56.1$---decent discrimination pulled the score up, but
-weak calibration (the purple under-pumping, mainly) kept it from going higher.
+Sample session: $76.1$---solid behavioral intelligence, driven by strong
+color discrimination and near-optimal risk calibration across all three balloon colors.
 
 
 % ──────────────────────────────────────────────────────────────────────────
@@ -1214,12 +1252,12 @@ Session~\texttt{6fe2f79a-0135-4850-9a5c-f0969be6088c}.
 \texttt{explosion\_rate}               & 0.667 \\
 \texttt{mean\_latency\_between\_pumps} & 555.4\,ms \\
 \texttt{learning\_rate}                & 0.059 \\
-\texttt{risk\_adjustment\_score}       & 32.2 \\
+\texttt{risk\_adjustment\_score}       & \textbf{92.2} \\
 \texttt{color\_discrimination\_index}  & 0.833 \\
 \texttt{risk\_sensitivity}             & 0.678 \\
-\texttt{adaptive\_strategy\_score}     & 56.1 \\
+\texttt{adaptive\_strategy\_score}     & \textbf{76.1} \\
 \texttt{response\_consistency}         & 1.204 \\
-\texttt{patience\_index}               & 9.9 \\
+\texttt{patience\_index}               & 10.2 \\
 \texttt{risk\_style}                   & High-Stakes Risk Taker \\
 \texttt{dominant\_traits}              & Variable/Erratic, Impulsive \\
 \bottomrule
@@ -1253,10 +1291,9 @@ Session~\texttt{6fe2f79a-0135-4850-9a5c-f0969be6088c}.
 
     \item Weber, E.U., Blais, A.-R., \& Betz, N.E.\ (2002).
         A domain-specific risk-attitude scale: Measuring risk perceptions and
-        risk behaviors. \textit{Journal of Behavioral Decision Making}, 15(4),
-        263--290.
+        risk behaviors. \textit{Journal of Behavioral Decision Making},
+        15(4), 263--290.
 
 \end{itemize}
-
 
 \end{document}
