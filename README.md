@@ -91,16 +91,16 @@ The clustering pipeline operates on six behavioural features extracted from BART
 
 ## References
 
-• Blais, A.-R. & Weber, E.U. (2006). A Domain-Specific Risk-Taking (DOSPERT) scale
+* Blais, A.-R. & Weber, E.U. (2006). A Domain-Specific Risk-Taking (DOSPERT) scale
 for adult populations. Judgment and Decision Making, 1(2), 33–47.
-• Dinç, S.C. & Yavaş Tez, Ö. (2019). Alana özgü risk alma ölçeği — kısa formu’nun
+* Dinç, S.C. & Yavaş Tez, Ö. (2019). Alana özgü risk alma ölçeği — kısa formu’nun
 (DOSPERT-30) Türkçeye uyarlama çalışması [The adaptation study into Turkish of the
 Domain-Specific Risk-Taking Scale — Short Form (DOSPERT-30)]. Spor Bilimleri Der-
 gisi, 30(3), 107–120. https://doi.org/10.17644/sbd.471304
-• Lejuez, C.W., Read, J.P., Kahler, C.W., et al. (2002). Evaluation of a behavioral mea-
+* Lejuez, C.W., Read, J.P., Kahler, C.W., et al. (2002). Evaluation of a behavioral mea-
 sure of risk taking: The Balloon Analogue Risk Task (BART). Journal of Experimental
 Psychology: Applied, 8(2), 75–84.
-• Weber, E.U., Blais, A.-R., & Betz, N.E. (2002). A domain-specific risk-attitude scale:
+* Weber, E.U., Blais, A.-R., & Betz, N.E. (2002). A domain-specific risk-attitude scale:
 Measuring risk perceptions and risk behaviors. Journal of Behavioral Decision Making,
 15(4), 263–290.
 
