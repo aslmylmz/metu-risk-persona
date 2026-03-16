@@ -110,7 +110,7 @@ This project is licensed under the [MIT License](LICENSE).
 If you use this platform in your research, please cite:
 
 ```bibtex
-@software{meturiskpersona,
+@software{meturiskpersona2026,
   author    = {Yılmaz, Ahmet Selim},
   title     = {METU Risk Persona: A Multi-Risk BART Platform for Behavioural Assessment},
   year      = {2026},
