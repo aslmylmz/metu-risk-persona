@@ -62,7 +62,7 @@ COLOR_PROFILES = {
 
 # Minimum collected (non-exploded) balloons per color before falling back
 # to all balloons.  With 10 balloons per color, orange typically yields
-# only 1-3 collected (P(survive) at 4 pumps ≈ 16%).  A threshold of 2
+# only 1-3 collected (P(survive) at 4 pumps ≈ 20.5%).  A threshold of 2
 # ensures we have at least some variance estimate; below that, we fall
 # back to all balloons (truncated but better than nothing).
 MIN_COLLECTED_FALLBACK = 2
@@ -935,7 +935,7 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
 
     # Orange average pumps — uses collected (non-exploded) balloons to reflect
     # actual behavioral intention.  Exploded orange balloons have truncated counts
-    # (P(survive 4 pumps on orange) ~ 16%, so most orange balloons explode).
+    # (P(survive 4 pumps on orange) ~ 20.5%, so most orange balloons explode).
     orange_behavioral = color_pumps_behavioral.get("orange", [])
     orange_avg_pumps = float(np.mean(orange_behavioral)) if orange_behavioral else 0.0
 
