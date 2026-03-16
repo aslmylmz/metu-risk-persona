@@ -53,7 +53,7 @@ metu-risk-persona/
 ├── clustering/
 │   └── clustering_pipeline.py          K-Means clustering with PCA visualization
 ├── docs/
-│   ├── bart_metrics_reference.tex      LaTeX reference for metric definitions (placeholder)
+│   ├── bart_metrics_reference.tex      LaTeX reference for metric definitions
 │   └── figures/
 │       └── .gitkeep
 ├── data/
