@@ -20,7 +20,8 @@ Explosion model (frontend):
     This is NOT a pre-drawn uniform distribution — the optimal stopping point under
     this model is lower than maxPumps / 2.  For orange (N=8) the EV-maximising
     stop is ~2 pumps; for teal (N=32) ~6 pumps; for purple (N=128) ~12 pumps.
-    The true peaks of the EV curves are actually close to the square root of N.
+    (Optimal stops are approximately sqrt(N), derived from the EV-curve peak of
+    the sequential Bernoulli model — not maxPumps/4 as previously documented.)
 
 RNG-Truncation Robustness:
     All behavioral-intention metrics use COLLECTED (non-exploded) balloons only.
@@ -62,10 +63,87 @@ COLOR_PROFILES = {
 
 # Minimum collected (non-exploded) balloons per color before falling back
 # to all balloons.  With 10 balloons per color, orange typically yields
-# only 1-3 collected (P(survive) at 4 pumps ≈ 20.5%).  A threshold of 2
+# only 1-3 collected (P(survive) at 4 pumps ≈ 16%).  A threshold of 2
 # ensures we have at least some variance estimate; below that, we fall
 # back to all balloons (truncated but better than nothing).
 MIN_COLLECTED_FALLBACK = 2
+
+
+# ── EV Computation (Sequential Bernoulli Model) ─────────────────────────────
+
+
+def _compute_ev(s: int, max_pumps: int) -> float:
+    """
+    Compute expected value of stopping after s pumps under the sequential
+    Bernoulli explosion model: P(explode at pump k) = k / maxPumps.
+
+    EV(s) = s × ∏(k=1 to s) (1 - k/N)
+
+    Parameters
+    ----------
+    s : int
+        Number of pumps before collecting.
+    max_pumps : int
+        Maximum pumps for this balloon color (N).
+
+    Returns
+    -------
+    float
+        Expected value (reward units = pump count × survival probability).
+    """
+    if s <= 0 or s > max_pumps:
+        return 0.0
+    survival = 1.0
+    for k in range(1, s + 1):
+        survival *= (1.0 - k / max_pumps)
+        if survival <= 0:
+            return 0.0
+    return s * survival
+
+
+def _compute_ev_optimal(max_pumps: int) -> tuple[int, float]:
+    """
+    Find the pump count that maximizes EV under P(explode at k) = k/N.
+
+    Returns
+    -------
+    tuple[int, float]
+        (optimal_stop, max_ev)
+    """
+    best_s = 0
+    best_ev = 0.0
+    for s in range(1, max_pumps + 1):
+        ev = _compute_ev(s, max_pumps)
+        if ev > best_ev:
+            best_ev = ev
+            best_s = s
+        elif ev < best_ev * 0.5:
+            # Past the peak and declining fast — stop searching
+            break
+    return best_s, best_ev
+
+
+def _compute_survival_probability(s: int, max_pumps: int) -> float:
+    """
+    Compute probability of surviving s pumps: ∏(k=1 to s) (1 - k/N).
+    """
+    if s <= 0:
+        return 1.0
+    survival = 1.0
+    for k in range(1, s + 1):
+        survival *= (1.0 - k / max_pumps)
+    return max(0.0, survival)
+
+
+# Cache optimal stops so we don't recompute every call
+_EV_OPTIMAL_CACHE: dict[int, tuple[int, float]] = {}
+
+
+def _get_ev_optimal(max_pumps: int) -> tuple[int, float]:
+    """Get cached EV-optimal stop for a given max_pumps."""
+    if max_pumps not in _EV_OPTIMAL_CACHE:
+        _EV_OPTIMAL_CACHE[max_pumps] = _compute_ev_optimal(max_pumps)
+    return _EV_OPTIMAL_CACHE[max_pumps]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -508,45 +586,47 @@ def _calculate_risk_adjustment_score(
     color_pumps: dict[str, list[int]],
 ) -> float:
     """
-    Calculate risk adjustment score based on appropriate behavior per color.
+    Calculate risk adjustment score based on EV-optimal behavior per color.
 
-    Scores the participant on whether their average pumps are calibrated to
-    each balloon's risk level.
+    Scores the participant on whether their average pumps are calibrated to the
+    true EV-optimal stopping point for each balloon color.  The optimal stops are
+    derived from the peak of the EV curve under the sequential Bernoulli model
+    (P(explode at pump k) = k / maxPumps) and are approximately sqrt(N):
 
-    Expects collected-only pump data to avoid RNG truncation bias.
-    Using all balloons would undercount orange pumps (most explode, truncating
-    the count) and give undeserved credit for "low" orange pumping.
+    - Purple (N=128): EV-optimal = 12 pumps
+    - Teal   (N=32):  EV-optimal = 6 pumps
+    - Orange (N=8):   EV-optimal = 2 pumps
 
-    Ideal behavior under the sequential Bernoulli explosion model
-    (P(explode at pump k) = k / maxPumps):
-    - Purple (N=128): EV-optimal ~ 12.0 pumps.
-    - Teal   (N=32):  EV-optimal ~ 6.0 pumps.
-    - Orange (N=8):   EV-optimal ~ 2.0 pumps.
-
-    Note: The score evaluates the absolute distance from the EV-optimal point,
-    scaled linearly down to 0 at the extreme distances (0 or max_pumps).
+    Each color is scored by absolute distance from its optimal stop, scaled so
+    that score = 100 at the optimum and decreases linearly to 0 at the extremes
+    (either 0 pumps or maxPumps for that color).  This correctly penalises both
+    under-pumping AND over-pumping — the old asymmetric np.clip formulas rewarded
+    maxing out purple and zeroing out orange, which is inconsistent with the
+    EV-curve shape.
 
     Returns
     -------
     float
-        Risk adjustment score (0-100). 100 = optimal risk calibration.
+        Risk adjustment score (0-100). 100 = perfectly calibrated.
     """
+    cp = color_pumps  # local alias to match caller convention
+
     optimal_stops = {"purple": 12.0, "teal": 6.0, "orange": 2.0}
     max_pumps_caps = {"purple": 128, "teal": 32, "orange": 8}
     scores = []
 
     for color in ["purple", "teal", "orange"]:
-        if color in color_pumps and len(color_pumps[color]) > 0:
-            mean_pumps = np.mean(color_pumps[color])
+        if color in cp and len(cp[color]) > 0:
+            mean_pumps = np.mean(cp[color])
             opt = optimal_stops[color]
             mx = max_pumps_caps[color]
-            
+
             # Max possible distance from optimal (either down to 0, or up to max_pumps)
             max_dist = max(opt, mx - opt)
-            
+
             # Score is 100 at optimal, scaling linearly down to 0 at the extremes
-            score = float(np.clip(1.0 - abs(mean_pumps - opt) / max_dist, 0.0, 1.0) * 100.0)
-            scores.append(score)
+            score = np.clip(1.0 - abs(mean_pumps - opt) / max_dist, 0.0, 1.0) * 100.0
+            scores.append(float(score))
 
     if not scores:
         return 0.0
@@ -555,6 +635,244 @@ def _calculate_risk_adjustment_score(
     if np.isnan(result):
         return 0.0
     return result
+
+
+def _compute_ev_ratio_score(
+    color_pumps_collected: dict[str, list[int]],
+    color_balloons: dict[str, int],
+    min_collected: int = MIN_COLLECTED_FALLBACK,
+) -> tuple[float, dict[str, float]]:
+    """
+    Compute EV-Ratio Risk Calibration Score (EV-weighted).
+
+    For each color with sufficient COLLECTED data, computes:
+        EV(round(mean_behavioral_pumps)) / EV(optimal)
+
+    Colors where balloons existed but none were collected (all exploded)
+    receive efficiency = 0.
+
+    The overall score is a WEIGHTED average of per-color efficiencies,
+    where each color's weight is its EV-optimal value. This means
+    high-reward colors (purple, EV≈6.46) contribute more than low-reward
+    colors (orange, EV≈1.31), reflecting actual reward potential.
+
+    Weights: purple ≈ 60%, teal ≈ 28%, orange ≈ 12%.
+
+    Parameters
+    ----------
+    color_pumps_collected : dict[str, list[int]]
+        Pump counts per color — COLLECTED ONLY (not fallback).
+    color_balloons : dict[str, int]
+        Total balloons per color (including exploded).
+    min_collected : int
+        Minimum collected balloons required per color.
+
+    Returns
+    -------
+    tuple[float, dict[str, float]]
+        (overall_score, {color: efficiency})
+        efficiency values are in [0, 1], overall_score in [0, 100].
+    """
+    per_color_efficiency: dict[str, float] = {}
+
+    for color in ["purple", "teal", "orange"]:
+        if color not in COLOR_PROFILES:
+            continue
+        total = color_balloons.get(color, 0)
+        if total == 0:
+            continue  # Color not in session
+
+        pumps = color_pumps_collected.get(color, [])
+        if len(pumps) < min_collected:
+            # Balloons existed but insufficient collected — participant failed
+            # to adapt. EV-efficiency = 0 (earned nothing from this risk level).
+            per_color_efficiency[color] = 0.0
+            continue
+
+        max_p = COLOR_PROFILES[color]["max_pumps"]
+        optimal_stop, optimal_ev = _get_ev_optimal(max_p)
+
+        if optimal_ev <= 0:
+            continue
+
+        mean_pumps = float(np.mean(pumps))
+        # Use floor and ceil to interpolate EV for non-integer mean
+        s_low = max(0, int(np.floor(mean_pumps)))
+        s_high = min(max_p, int(np.ceil(mean_pumps)))
+
+        if s_low == s_high:
+            participant_ev = _compute_ev(s_low, max_p)
+        else:
+            frac = mean_pumps - s_low
+            ev_low = _compute_ev(s_low, max_p)
+            ev_high = _compute_ev(s_high, max_p)
+            participant_ev = ev_low + frac * (ev_high - ev_low)
+
+        efficiency = min(1.0, participant_ev / optimal_ev)
+        per_color_efficiency[color] = efficiency
+
+    if not per_color_efficiency:
+        return 0.0, {}
+
+    # EV-weighted average: weight each color by its optimal EV value
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for color, eff in per_color_efficiency.items():
+        max_p = COLOR_PROFILES[color]["max_pumps"]
+        _, optimal_ev = _get_ev_optimal(max_p)
+        weighted_sum += eff * optimal_ev
+        weight_total += optimal_ev
+
+    overall = (weighted_sum / weight_total) * 100.0 if weight_total > 0 else 0.0
+    return overall, per_color_efficiency
+
+
+def _compute_explosion_penalty(
+    color_explosions: dict[str, int],
+    color_balloons: dict[str, int],
+) -> tuple[float, dict[str, float]]:
+    """
+    Compute explosion penalty: excess explosion rate vs expected at EV-optimal.
+
+    For each color, the expected explosion rate at optimal play is:
+        1 - ∏(k=1 to s*) (1 - k/N)
+    where s* is the EV-optimal stop.
+
+    Excess = max(0, observed_rate - expected_rate).
+    Final penalty = mean of per-color excess rates.
+
+    Returns
+    -------
+    tuple[float, dict[str, float]]
+        (overall_penalty in [0,1], {color: excess_rate})
+    """
+    per_color_excess: dict[str, float] = {}
+
+    for color in ["purple", "teal", "orange"]:
+        if color not in COLOR_PROFILES:
+            continue
+        total = color_balloons.get(color, 0)
+        if total == 0:
+            continue
+
+        explosions = color_explosions.get(color, 0)
+        observed_rate = explosions / total
+
+        max_p = COLOR_PROFILES[color]["max_pumps"]
+        optimal_stop, _ = _get_ev_optimal(max_p)
+        expected_rate = 1.0 - _compute_survival_probability(optimal_stop, max_p)
+
+        excess = max(0.0, observed_rate - expected_rate)
+        per_color_excess[color] = excess
+
+    if not per_color_excess:
+        return 0.0, {}
+
+    overall = float(np.mean(list(per_color_excess.values())))
+    return min(1.0, overall), per_color_excess
+
+
+def _compute_ev_efficiency_differentiation(
+    per_color_efficiency: dict[str, float],
+    color_pumps_collected: dict[str, list[int]],
+    color_balloons: dict[str, int],
+) -> float | None:
+    """
+    Compute EV-efficiency differentiation: 1 - CV(per_color_efficiencies).
+
+    Colors with sufficient collected data use their computed EV-efficiency.
+    Colors where balloons EXISTED but NONE were collected (all exploded)
+    receive efficiency = 0, since the participant earned nothing from that
+    risk level — a clear failure to differentiate strategy.
+
+    Returns None if fewer than 2 colors had any balloons at all.
+
+    High score = participant achieves similar EV-efficiency across risk levels.
+    """
+    effective_efficiency: dict[str, float] = {}
+
+    for color in ["purple", "teal", "orange"]:
+        total = color_balloons.get(color, 0)
+        if total == 0:
+            continue  # Color not present in session
+
+        collected = color_pumps_collected.get(color, [])
+
+        if len(collected) >= MIN_COLLECTED_FALLBACK:
+            # Use computed EV-efficiency
+            if color in per_color_efficiency:
+                effective_efficiency[color] = per_color_efficiency[color]
+        else:
+            # Balloons existed but insufficient collected — participant failed
+            # to adapt to this risk level. EV-efficiency = 0 (earned nothing).
+            effective_efficiency[color] = 0.0
+
+    if len(effective_efficiency) < 2:
+        return None
+
+    values = list(effective_efficiency.values())
+    mean_eff = float(np.mean(values))
+
+    if mean_eff <= 0:
+        return 0.0
+
+    cv = float(np.std(values) / mean_eff)
+    return float(np.clip(1.0 - cv, 0.0, 1.0))
+
+
+def _detect_flat_strategy(
+    color_pumps_all: dict[str, list[int]],
+    color_explosions: dict[str, int],
+    color_balloons: dict[str, int],
+) -> bool:
+    """
+    Detect if participant uses an undifferentiated flat pumping strategy.
+
+    A flat strategy is indicated by:
+    1. Low CV of per-color RAW mean pumps (similar target across colors)
+    2. Explosion rate increasing sharply with risk level (confirming the
+       flat target exceeds safe capacity on riskier colors)
+
+    The raw means (not collected-only) are used here because collected-only
+    on orange would hide the flat target (truncated by explosions).
+    """
+    if len(color_pumps_all) < 2:
+        return False
+
+    # Compute raw means per color
+    raw_means: dict[str, float] = {}
+    for color in ["purple", "teal", "orange"]:
+        pumps = color_pumps_all.get(color, [])
+        if pumps:
+            raw_means[color] = float(np.mean(pumps))
+
+    if len(raw_means) < 2:
+        return False
+
+    # Check 1: Are raw means similar? (CV < 0.25 = quite flat)
+    values = list(raw_means.values())
+    mean_val = float(np.mean(values))
+    if mean_val <= 0:
+        return False
+
+    cv = float(np.std(values) / mean_val)
+    if cv > 0.25:
+        return False  # Participant IS differentiating by raw pump count
+
+    # Check 2: Does explosion rate increase with risk?
+    # A flat strategy targeting X pumps should produce:
+    # low explosion on purple (X << 128), moderate on teal, high on orange
+    explosion_rates: dict[str, float] = {}
+    for color in ["purple", "teal", "orange"]:
+        total = color_balloons.get(color, 0)
+        if total > 0:
+            explosion_rates[color] = color_explosions.get(color, 0) / total
+
+    # If orange explosion rate > 80% and purple < 40%, flat strategy confirmed
+    orange_exp = explosion_rates.get("orange", 0)
+    purple_exp = explosion_rates.get("purple", 0)
+
+    return orange_exp > 0.8 and purple_exp < 0.5
 
 
 def _calculate_consistency_breakdown(
@@ -607,30 +925,39 @@ def _calculate_consistency_breakdown(
 
     within_balloon_cv = float(np.mean(within_cvs)) if within_cvs else 0.0
 
-    # Between-balloon: CV of pump counts across COLLECTED balloons only.
-    # Exploded balloons have truncated pump counts that add artificial variance.
-    collected_pump_counts = []
-    all_pump_counts = []
+    # Between-balloon: CV of pump counts WITHIN each color, then averaged.
+    # This isolates genuine strategic inconsistency from appropriate
+    # cross-color variation (pumping more on purple than orange is correct,
+    # not inconsistent).
+    # Uses collected-only balloons per color to avoid truncation variance.
+    color_collected_pumps: dict[str, list[int]] = defaultdict(list)
+    color_all_pumps: dict[str, list[int]] = defaultdict(list)
+
     for b in balloons:
         pumps = sum(1 for e in b if e.type == "pump")
-        all_pump_counts.append(pumps)
+        color = _extract_balloon_color(b)
+        color_all_pumps[color].append(pumps)
         terminal = next(
             (e.type for e in reversed(b) if e.type in ("collect", "explode")),
             None,
         )
         if terminal != "explode":
-            collected_pump_counts.append(pumps)
+            color_collected_pumps[color].append(pumps)
 
-    # Fall back to all balloons if too few collected
-    pump_counts_for_cv = (
-        collected_pump_counts if len(collected_pump_counts) >= 5 else all_pump_counts
-    )
-    pump_arr = np.array(pump_counts_for_cv, dtype=np.float64)
+    per_color_cvs: list[float] = []
+    for color in color_all_pumps:
+        # Prefer collected, fall back to all if too few
+        data = color_collected_pumps.get(color, [])
+        if len(data) < 3:
+            data = color_all_pumps[color]
+        if len(data) < 2:
+            continue
+        arr = np.array(data, dtype=np.float64)
+        mean_val = float(np.mean(arr))
+        if mean_val > 0:
+            per_color_cvs.append(float(np.std(arr) / mean_val))
 
-    if len(pump_arr) >= 2 and np.mean(pump_arr) > 0:
-        between_balloon_cv = float(np.std(pump_arr) / np.mean(pump_arr))
-    else:
-        between_balloon_cv = 0.0
+    between_balloon_cv = float(np.mean(per_color_cvs)) if per_color_cvs else 0.0
 
     return within_balloon_cv, between_balloon_cv
 
@@ -639,50 +966,63 @@ def _generate_behavioral_profile(
     metrics: BARTMetrics,
 ) -> dict[str, Any]:
     """
-    Generate Pymetrics-style narrative behavioral profile from metrics.
+    Generate narrative behavioral profile from EV-efficiency-based metrics.
+
+    Uses scientifically grounded thresholds tied to the Bernoulli explosion
+    model rather than arbitrary raw pump count cutoffs.
 
     Dimensions:
-    - Risk Style         (rng_normalized_pumps vs explosion_rate)
-    - Adaptability       (half_split_learning_rate vs risk_sensitivity)
+    - Risk Style         (risk_calibration_score, ev_efficiency, flat_strategy)
+    - Adaptability       (half_split_learning_rate)
     - Consistency        (within_balloon_consistency, between_balloon_consistency)
     """
     profile: dict[str, Any] = {}
 
-    # 1. Risk Style — use rng_normalized_pumps (behavioral) rather than explosion_rate (outcome)
-    if metrics.rng_normalized_pumps > 0.45:
-        risk_style = "High-Stakes Risk Taker"
+    # 1. Risk Style — use EV-based metrics instead of raw pump counts
+    if metrics.flat_strategy_detected:
+        risk_style = "Undifferentiated Risk Approach"
         risk_desc = (
-            "You tend to push limits to the absolute maximum. "
-            "While this can lead to high rewards, it often results in frequent failures."
+            "You applied a similar pumping strategy across all balloon types regardless "
+            "of their risk levels. While this can feel efficient, it misses opportunities "
+            "on safe balloons and causes excessive losses on risky ones."
         )
-        workplace = "Best suited for R&D or crisis management where bold action is required."
-    elif metrics.rng_normalized_pumps < 0.10 and metrics.average_pumps_adjusted < 10:
+        workplace = "May benefit from structured risk frameworks that make risk levels explicit."
+    elif metrics.risk_calibration_score >= 80 and metrics.explosion_penalty < 0.1:
+        risk_style = "Calibrated Risk Optimizer"
+        risk_desc = (
+            "You calibrated your risk-taking precisely to match actual danger levels. "
+            "You pushed when it was safe and pulled back when risk was high — "
+            "maximizing expected reward across all conditions."
+        )
+        workplace = "Strong fit for roles requiring nuanced risk assessment and optimization."
+    elif metrics.explosion_penalty > 0.3:
+        risk_style = "Aggressive Risk Taker"
+        risk_desc = (
+            "You pushed well past optimal stopping points, particularly on higher-risk "
+            "balloons. This aggressive approach led to significantly more explosions "
+            "than an optimal strategy would produce."
+        )
+        workplace = "Action-oriented energy that benefits from guardrails and risk frameworks."
+    elif metrics.rng_normalized_pumps < 0.10 and metrics.explosion_penalty < 0.05:
         risk_style = "Conservative Safety-Seeker"
         risk_desc = (
-            "You prioritize safety and certainty over potential gains. "
-            "You avoid unnecessary risks but may miss out on high-reward opportunities."
+            "You prioritized safety and certainty, stopping well before optimal "
+            "on most balloons. You avoided losses but left significant reward on the table."
         )
-        workplace = "Excellent for QA, compliance, or finance roles requiring risk mitigation."
-    elif metrics.risk_sensitivity > 0.7:
-        risk_style = "Strategic Risk Taker"
-        risk_desc = (
-            "You possess strong risk intuition. You take calculated risks "
-            "only when the odds are in your favor and pull back when danger increases."
-        )
-        workplace = "Strong fit for trading, strategy, or leadership roles requiring calculated decisions."
+        workplace = "Excellent for roles requiring risk mitigation and compliance."
     else:
         risk_style = "Balanced Explorer"
         risk_desc = (
-            "You maintain a healthy balance between safety and exploration. "
-            "You are willing to take risks but generally stay within reasonable bounds."
+            "You maintain a reasonable balance between safety and exploration. "
+            "Your risk-taking is moderate with room for more precise calibration."
         )
-        workplace = "Versatile fit for general management and operational roles."
+        workplace = "Versatile fit for roles requiring balanced judgment."
 
     profile["risk_style"] = risk_style
     profile["description"] = risk_desc
     profile["workplace_implication"] = workplace
 
-    # 2. Key Traits
+    # 2. Key Traits — EV-efficiency based
     traits = []
 
     if metrics.within_balloon_consistency < 0.2 and metrics.between_balloon_consistency < 0.4:
@@ -692,20 +1032,28 @@ def _generate_behavioral_profile(
     elif metrics.between_balloon_consistency > 1.0:
         traits.append("Strategically Variable")
 
-    # Use half_split_learning_rate (more robust) for the trait label
     if metrics.half_split_learning_rate > 0.1:
         traits.append("Adaptive Learner")
     elif metrics.half_split_learning_rate < -0.1:
         traits.append("Risk-Averse Learner")
 
-    # Impulsivity: orange avg pumps > 4 (half of orange max=8) = pumping past
-    # the EV-optimal region and into clearly above-average risk on high-risk balloons.
-    if metrics.orange_avg_pumps > 4.0:
-        traits.append("Impulsive")
+    # Impulsivity: only when we have real collected orange data
+    if metrics.orange_avg_pumps is not None and metrics.orange_avg_pumps > 4.0:
+        traits.append("Impulsive on High-Risk")
 
-    # Patience: patience_index > 40 pumps on purple (31% of max=128)
-    if metrics.patience_index > 40:
+    # Patient Optimizer: purple EV-efficiency > 85% (actually near-optimal play)
+    purple_eff = metrics.ev_optimal_stops.get("_purple_efficiency")
+    if purple_eff is not None and purple_eff > 0.85:
         traits.append("Patient Optimizer")
+    elif metrics.patience_index > 20:
+        # Pumping 20+ on purple (optimal ~11) is over-pumping, not patience
+        traits.append("Over-Pumper on Safe Balloons")
+
+    if metrics.flat_strategy_detected:
+        traits.append("Flat Strategy")
+
+    if metrics.explosion_penalty > 0.3:
+        traits.append("High Explosion Penalty")
 
     profile["dominant_traits"] = traits
 
@@ -819,6 +1167,29 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
     all_pumps_array = np.array(pump_counts, dtype=np.float64)
     total_pumps = int(np.sum(all_pumps_array))
 
+    # ── Money collected ───────────────────────────────────────────────────────
+    # Each pump on a collected balloon is worth $0.25.
+    _money_pumps = 0
+    money_collected = 0.0
+    for evt in events:
+        if evt.type == "pump":
+            _money_pumps += 1
+        elif evt.type == "collect":
+            money_collected += _money_pumps * 0.25
+            _money_pumps = 0
+        elif evt.type == "explode":
+            _money_pumps = 0
+
+    # Theoretical optimal expected earnings (from EV-curve simulation):
+    # 10 purple × EV(11,128)×0.25 + 10 teal × EV(5,32)×0.25 + 10 orange × EV(2,8)×0.25 ≈ $27.03
+    _optimal_expected_earnings = 0.0
+    for color_name, profile in COLOR_PROFILES.items():
+        max_p = profile["max_pumps"]
+        n_balloons = color_balloons.get(color_name, 10)
+        optimal_stop, optimal_ev = _get_ev_optimal(max_p)
+        _optimal_expected_earnings += n_balloons * optimal_ev * 0.25
+    money_efficiency = min(1.0, money_collected / _optimal_expected_earnings) if _optimal_expected_earnings > 0 else 0.0
+
     # ── Resolve collected-vs-all per color ────────────────────────────────────
     # For each color, prefer collected (non-exploded) pump data for behavioral
     # metrics.  Fall back to all balloons if too few collected are available,
@@ -876,6 +1247,26 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
     else:
         mean_latency = 0.0
 
+    # ── EV-Based Metrics (scientifically rigorous, v3) ───────────────────────
+    # Computed early so per-color results are available for ColorMetrics.
+
+    # Compute dynamic EV-optimal stops
+    ev_optimal_stops: dict[str, int] = {}
+    for color, profile in COLOR_PROFILES.items():
+        opt_stop, _ = _get_ev_optimal(profile["max_pumps"])
+        ev_optimal_stops[color] = opt_stop
+
+    # EV-Ratio Score: EV(participant) / EV(optimal) per color
+    # Uses COLLECTED-ONLY data — never fallback/truncated data.
+    ev_ratio_score, per_color_efficiency = _compute_ev_ratio_score(
+        color_pumps_collected, color_balloons,
+    )
+
+    # Explosion Penalty: excess explosion rate vs expected at optimal
+    explosion_penalty, per_color_excess = _compute_explosion_penalty(
+        color_explosions, color_balloons,
+    )
+
     # ── Color-Based Metrics (descriptive, uses ALL balloons) ─────────────────
     color_metrics_list: list[ColorMetrics] = []
 
@@ -896,6 +1287,10 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
         behavioral_data, used_fb = _prefer_collected(collected_of_color, pumps_of_color)
         behavioral_avg = float(np.mean(behavioral_data)) if behavioral_data else 0.0
 
+        color_ev_eff = per_color_efficiency.get(color)
+        color_ev_optimal = ev_optimal_stops.get(color)
+        color_excess_exp = per_color_excess.get(color)
+
         color_metrics_list.append(
             ColorMetrics(
                 color=color,
@@ -906,62 +1301,55 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
                 collected_count=len(collected_of_color),
                 risk_profile=COLOR_PROFILES[color]["risk"],
                 used_fallback=used_fb,
+                ev_efficiency=round(color_ev_eff, 4) if color_ev_eff is not None else None,
+                ev_optimal_stop=color_ev_optimal,
+                excess_explosion_rate=round(color_excess_exp, 4) if color_excess_exp is not None else None,
             ),
         )
 
     # ── Learning & Adaptation Metrics (use collected-only internally) ────────
 
     # Learning Rate — regression-based (preserved for backward compat; noisy at N=10)
-    # Now uses collected-only balloons internally to avoid RNG truncation bias.
     learning_rate = _calculate_learning_rate(balloon_data)
 
     # Half-Split Learning Rate — more robust at N=10 per color
-    # Now uses collected-only balloons internally to avoid RNG truncation bias.
     half_split_lr = _calculate_half_split_learning_rate(balloon_data)
 
-    # Color Discrimination (purple vs orange behavior differentiation, Cohen's d)
-    # Uses collected-only pump data via color_pumps_behavioral.
+    # Color Discrimination (LEGACY — Cohen's d, kept for backward compat)
     color_discrimination = _calculate_color_discrimination(color_pumps_behavioral)
 
-    # Risk Adjustment Score (appropriate behavior per color, 0-100)
-    # Uses collected-only pump data via color_pumps_behavioral.
+    # Risk Adjustment Score (LEGACY — kept for backward compat)
     risk_adjustment = _calculate_risk_adjustment_score(color_pumps_behavioral)
 
-    # Risk Sensitivity (Pearson r between risk capacity and pumping behavior)
-    # Uses collected-only pump data via color_pumps_behavioral.
+    # Risk Sensitivity (Pearson r — kept for descriptive use)
     risk_sensitivity = _calculate_risk_sensitivity(color_pumps_behavioral)
+
+    # Risk Calibration Score: combines EV-efficiency with explosion penalty
+    risk_calibration_score = float(
+        np.clip(ev_ratio_score * (1.0 - explosion_penalty), 0.0, 100.0)
+    )
+
+    # EV-Efficiency Differentiation (replaces Cohen's d)
+    ev_efficiency_diff = _compute_ev_efficiency_differentiation(
+        per_color_efficiency, color_pumps_collected, color_balloons,
+    )
+
+    # Flat Strategy Detection
+    flat_strategy = _detect_flat_strategy(
+        color_pumps_all, color_explosions, color_balloons,
+    )
 
     # ── Behavioral Indices (use collected-only data) ─────────────────────────
 
-    # Orange average pumps — uses collected (non-exploded) balloons to reflect
-    # actual behavioral intention.  Exploded orange balloons have truncated counts
-    # (P(survive 4 pumps on orange) ~ 20.5%, so most orange balloons explode).
-    orange_behavioral = color_pumps_behavioral.get("orange", [])
-    orange_avg_pumps = float(np.mean(orange_behavioral)) if orange_behavioral else 0.0
-
-    # Impulsivity Index — behavioral, normalized to orange max capacity.
-    # Uses collected-only orange balloons: the pump count at which the participant
-    # CHOSE to stop, not where RNG terminated them.
-    # Range [0, 1]: 0 = no pumping, 1 = always pumped to the explosion ceiling.
-    orange_max = float(COLOR_PROFILES["orange"]["max_pumps"])
-    impulsivity_index = float(np.clip(orange_avg_pumps / orange_max, 0.0, 1.0))
-
-    # Patience Index — mean pumps on collected purple balloons.
-    # Uses collected-only to reflect actual chosen stopping point, not
-    # RNG-truncated pump counts from exploded purple balloons.
-    purple_behavioral = color_pumps_behavioral.get("purple", [])
-    patience_index = float(np.mean(purple_behavioral)) if purple_behavioral else 0.0
-
-    # Patience Index Normalized — patience_index / purple max capacity (128).
-    purple_max = float(COLOR_PROFILES["purple"]["max_pumps"])
-    patience_index_normalized = float(np.clip(patience_index / purple_max, 0.0, 1.0))
+    # Orange average pumps — None when insufficient collected data
+    orange_collected_real = color_pumps_collected.get("orange", [])
+    has_orange_data = len(orange_collected_real) >= MIN_COLLECTED_FALLBACK
+    orange_avg_pumps: float | None = (
+        float(np.mean(orange_collected_real)) if has_orange_data else None
+    )
 
     # Response Consistency — global CV of all intra-balloon latencies.
     # Not affected by RNG truncation (measures timing, not pump counts).
-    # Note: High CV can mean erratic timing OR deliberate bimodal strategy
-    # (fast pumps on safe balloons, slow deliberate pumps on risky ones).
-    # See within_balloon_consistency and between_balloon_consistency for a
-    # decomposed view that distinguishes these two cases.
     if intra_balloon_latencies.size > 1:
         cv = float(np.std(intra_balloon_latencies) / np.mean(intra_balloon_latencies))
         response_consistency = cv
@@ -969,71 +1357,130 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
         response_consistency = 0.0
 
     # Consistency breakdown (within-balloon vs between-balloon)
-    # Between-balloon CV now uses collected-only balloons internally.
     within_balloon_cv, between_balloon_cv = _calculate_consistency_breakdown(balloons)
+
+    # Impulsivity Index — composite feature combining multiple signals.
+    # Always computable (never None), even when orange has 0 collected.
+    #
+    # Orange explosions primarily reflect poor color discrimination (the
+    # optimal stop is only ~2 pumps, so even slight misjudgment causes
+    # explosions). True impulsivity is better captured by timing behavior
+    # and overall excess explosions across ALL colors.
+    #
+    # Components:
+    #   1. Timing signal (weight 0.40):
+    #      - Fast, reflexive pumping: 1 - clamp(mean_latency / 800, 0, 1)
+    #      - Amplified by low within-balloon CV (consistent fast = reflexive)
+    #   2. Excess explosion signal (weight 0.40):
+    #      - Overall explosion_penalty captures over-pumping across ALL colors
+    #   3. Orange risk-taking signal (weight 0.20):
+    #      - Mild contribution — orange exploding is mostly discrimination
+    #      - If orange collected: 1 - EV_efficiency (over-pumping past optimal)
+    #      - If all exploded: orange_explosion_rate
+    #
+    # Range: [0, 1]. Higher = more impulsive.
+    orange_total = color_balloons.get("orange", 0)
+    orange_expl = color_explosions.get("orange", 0)
+
+    # Component 1: Timing impulsivity (fast + consistent = reflexive)
+    latency_signal = 1.0 - min(1.0, mean_latency / 800.0) if mean_latency > 0 else 0.0
+    # Amplify if within-balloon timing is very consistent (low CV = autopilot)
+    timing_impulsivity = min(1.0, latency_signal * (1.0 + 0.5 * max(0.0, 0.5 - within_balloon_cv)))
+
+    # Component 2: Excess explosions across all colors
+    explosion_signal = min(1.0, explosion_penalty * 2.0)  # Scale: 0.5 penalty → 1.0 signal
+
+    # Component 3: Orange risk-taking (low weight — mostly discrimination)
+    if has_orange_data and "orange" in per_color_efficiency:
+        orange_signal = 1.0 - per_color_efficiency["orange"]
+    elif orange_total > 0:
+        orange_signal = orange_expl / orange_total
+    else:
+        orange_signal = 0.0
+
+    # Weighted composite
+    impulsivity_index = float(np.clip(
+        0.40 * timing_impulsivity + 0.40 * explosion_signal + 0.20 * orange_signal,
+        0.0, 1.0,
+    ))
+
+    # Patience Index — mean pumps on collected purple balloons
+    purple_behavioral = color_pumps_behavioral.get("purple", [])
+    patience_index = float(np.mean(purple_behavioral)) if purple_behavioral else 0.0
+
+    # Patience Index Normalized
+    purple_max = float(COLOR_PROFILES["purple"]["max_pumps"])
+    patience_index_normalized = float(np.clip(patience_index / purple_max, 0.0, 1.0))
 
     # ── Composite Metrics ────────────────────────────────────────────────────
 
-    # Adaptive Strategy Score — composite of learning, discrimination, and risk adjustment.
-    # All three sub-metrics now use collected-only data, making the composite
-    # robust to RNG truncation bias.
-    # Design decision: Equal weighting (33.33% each).
-    # Rationale: No theoretical basis to privilege one sub-metric over another.
-    # Components:
-    #   1. half_split_learning_rate: [-1, 1] -> [0, 33.33]
-    #   2. color_discrimination:     [0, 1]  -> [0, 33.33]
-    #   3. risk_adjustment:          [0, 100] -> [0, 33.33]
+    # Adaptive Strategy Score — conditional weighting based on calibration quality.
+    # If already well-calibrated (ev_ratio >= 80), learning matters less.
+    # If poorly calibrated, learning signal is more informative.
+    # Money efficiency gets a fixed 10% weight (outcome grounding).
     safe_hslr = 0.0 if np.isnan(half_split_lr) else half_split_lr
-    safe_color_discrimination = 0.0 if np.isnan(color_discrimination) else color_discrimination
-    safe_risk_adjustment = 0.0 if np.isnan(risk_adjustment) else risk_adjustment
+    safe_ev_diff = ev_efficiency_diff if ev_efficiency_diff is not None else 0.0
+    safe_ev_ratio = ev_ratio_score / 100.0  # Normalize to [0, 1]
+
+    W_MONEY = 0.10  # Fixed 10% for realized outcome
+    if ev_ratio_score >= 80:
+        w_learning, w_calibration, w_differentiation = 0.09, 0.45, 0.36
+    else:
+        w_learning, w_calibration, w_differentiation = 0.36, 0.27, 0.27
+
+    learning_component = (safe_hslr + 1.0) / 2.0  # [-1, 1] -> [0, 1]
+    calibration_component = safe_ev_ratio           # [0, 1]
+    differentiation_component = safe_ev_diff        # [0, 1]
+    money_component = money_efficiency              # [0, 1]
 
     adaptive_strategy_score = (
-        (safe_hslr + 1.0) / 2.0 * 33.33          # Normalize [-1, 1] -> [0, 33.33]
-        + safe_color_discrimination * 33.33        # [0, 1] -> [0, 33.33]
-        + (safe_risk_adjustment / 100.0) * 33.33   # [0, 100] -> [0, 33.33]
-    )
+        learning_component * w_learning
+        + calibration_component * w_calibration
+        + differentiation_component * w_differentiation
+        + money_component * W_MONEY
+    ) * 100.0
     adaptive_strategy_score = float(np.clip(adaptive_strategy_score, 0.0, 100.0))
 
-    # RNG-Normalized Pumps — mean(pumps / color_max_pumps) across COLLECTED balloons.
-    # Uses collected-only data so the fraction reflects the participant's CHOSEN
-    # stopping point, not an RNG-truncated pump count.
-    # Captures behavioral intention as a fraction of each balloon's capacity,
-    # making it independent of which color appeared most.
-    normalized_pump_list: list[float] = []
-    for color, pumps_list in color_pumps_behavioral.items():
-        if color in COLOR_PROFILES:
+    # RNG-Normalized Pumps — color-mean-then-average.
+    # Average WITHIN each color first (per-color mean), then average across colors.
+    # This gives equal weight to each risk level regardless of collection rates.
+    # Uses collected-only data where available.
+    per_color_normalized: list[float] = []
+    for color in COLOR_PROFILES:
+        collected = color_pumps_collected.get(color, [])
+        if len(collected) >= MIN_COLLECTED_FALLBACK:
             cap = COLOR_PROFILES[color]["max_pumps"]
-            for p in pumps_list:
-                normalized_pump_list.append(p / cap)
+            color_mean = float(np.mean(collected)) / cap
+            per_color_normalized.append(color_mean)
 
     rng_normalized_pumps = (
-        float(np.mean(normalized_pump_list)) if normalized_pump_list else 0.0
+        float(np.mean(per_color_normalized)) if per_color_normalized else 0.0
     )
+
+    # Store per-color efficiency in ev_optimal_stops dict for profile access
+    _ev_stops_with_eff = dict(ev_optimal_stops)
+    for c, eff in per_color_efficiency.items():
+        _ev_stops_with_eff[f"_{c}_efficiency"] = eff
 
     # ── Logging ──────────────────────────────────────────────────────────────
     logger.info(
         "BART scored — balloons=%d pumps=%d explosions=%d "
         "avg_adjusted=%.2f avg_all=%.2f latency=%.1fms "
-        "learning_rate=%.3f half_split_lr=%.3f "
-        "discrimination=%.3f risk_adj=%.1f adaptive_score=%.1f "
-        "sensitivity=%.2f orange_avg=%.2f impulsivity=%.3f "
-        "patience=%.2f(norm=%.3f) rng_norm=%.3f valid=%s warnings=%d",
+        "ev_ratio=%.1f explosion_penalty=%.3f risk_cal=%.1f "
+        "adaptive_score=%.1f flat_strategy=%s "
+        "patience=%.2f rng_norm=%.3f valid=%s warnings=%d",
         total_balloons,
         total_pumps,
         total_explosions,
         average_pumps_adjusted,
         avg_pumps_all_balloons,
         mean_latency,
-        learning_rate,
-        half_split_lr,
-        color_discrimination,
-        risk_adjustment,
+        ev_ratio_score,
+        explosion_penalty,
+        risk_calibration_score,
         adaptive_strategy_score,
-        risk_sensitivity,
-        orange_avg_pumps,
-        impulsivity_index,
+        flat_strategy,
         patience_index,
-        patience_index_normalized,
         rng_normalized_pumps,
         session_valid,
         len(session_warnings),
@@ -1051,17 +1498,26 @@ def score_bart(events: list[GameEvent]) -> BARTMetrics:
         total_collections=total_collections,
         # Color breakdown
         color_metrics=color_metrics_list,
-        # Learning
+        # Learning (legacy + robust)
         learning_rate=round(learning_rate, 4),
         half_split_learning_rate=round(half_split_lr, 4),
-        # Risk calibration
+        # Legacy risk calibration (kept for backward compat)
         risk_adjustment_score=round(risk_adjustment, 4),
-        color_discrimination_index=round(color_discrimination, 4),
+        color_discrimination_index=round(color_discrimination, 4) if not np.isnan(color_discrimination) else None,
         risk_sensitivity=round(risk_sensitivity, 4),
+        # EV-based metrics (scientifically rigorous, v3)
+        ev_ratio_score=round(ev_ratio_score, 4),
+        explosion_penalty=round(explosion_penalty, 4),
+        risk_calibration_score=round(risk_calibration_score, 4),
+        ev_efficiency_differentiation=round(ev_efficiency_diff, 4) if ev_efficiency_diff is not None else None,
+        flat_strategy_detected=flat_strategy,
+        money_collected=round(money_collected, 2),
+        money_efficiency=round(money_efficiency, 4),
+        ev_optimal_stops=_ev_stops_with_eff,
         # Behavioral intention metrics (RNG-robust, collected-only)
         rng_normalized_pumps=round(rng_normalized_pumps, 4),
         avg_pumps_all_balloons=round(avg_pumps_all_balloons, 4),
-        orange_avg_pumps=round(orange_avg_pumps, 4),
+        orange_avg_pumps=round(orange_avg_pumps, 4) if orange_avg_pumps is not None else None,
         impulsivity_index=round(impulsivity_index, 4),
         # Patience
         patience_index=round(patience_index, 4),

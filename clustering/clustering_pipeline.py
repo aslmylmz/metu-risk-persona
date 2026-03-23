@@ -1,7 +1,8 @@
 """
-METU Risk Persona — K-Means Clustering Pipeline
+METU Risk Persona — K-Means Clustering Pipeline (v3)
 ====================================================
-Features: Demographics + DOSPERT-30 + BART
+Features: Demographics + DOSPERT-30 + BART (no behavioral inventory).
+
 Usage:
   python clustering_pipeline.py --data participants.csv
   python clustering_pipeline.py --data synthetic_metu_60.csv --output results/
@@ -24,9 +25,8 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 NOMINAL_COLS = []
 BINARY_COLS = []
 CONTINUOUS_COLS = [
-    
     "dospert_financial",
-    "bart_risk_sensitivity",'bart_patience_normalized','bart_impulsivity_index','bart_rng_normalized_pumps'    # CV of pump counts across balloons (strategy variability)
+    "bart_rng_normalized_pumps", "bart_impulsivity_index"
 ]
 
 FEATURE_GROUPS = {
@@ -55,6 +55,7 @@ plt.rcParams.update({
 
 def preprocess(filepath: str):
     df_raw = pd.read_csv(filepath)
+    df_raw = df_raw[df_raw["prior_task"] != 1].copy()
     df_work = df_raw.drop(columns=["participant_id"])
 
     ohe = OneHotEncoder(sparse_output=False, drop="first")
@@ -88,14 +89,14 @@ def preprocess(filepath: str):
 
 # ── Optimal K ────────────────────────────────────────────────────────────
 
-def find_optimal_k(X, k_range=range(2, 4)):
+def find_optimal_k(X, k_range=range(2, 7), force_k=None):
     inertias, silhouettes = [], {}
     for k in k_range:
-        km = KMeans(n_clusters=k, n_init=20, random_state=42, max_iter=2000)
+        km = KMeans(n_clusters=k, n_init="auto", random_state=42, max_iter=2000)
         labels = km.fit_predict(X)
         inertias.append(km.inertia_)
         silhouettes[k] = silhouette_score(X, labels)
-    best_k = max(silhouettes, key=silhouettes.get)
+    best_k = force_k if force_k else max(silhouettes, key=silhouettes.get)
     return best_k, inertias, silhouettes
 
 
@@ -267,15 +268,15 @@ def main():
     parser = argparse.ArgumentParser(description="METU Risk Persona — K-Means Clustering")
     parser.add_argument("--data", type=str, default="participants.csv")
     parser.add_argument("--output", type=str, default="clustering_results")
+    parser.add_argument("--k", type=int, default=3, help="Force number of clusters")
     args = parser.parse_args()
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-
     df_raw, df_scaled = preprocess(args.data)
     print(f"Loaded {len(df_raw)} participants, {df_scaled.shape[1]} features")
 
-    best_k, inertias, silhouettes = find_optimal_k(df_scaled.values)
+    best_k, inertias, silhouettes = find_optimal_k(df_scaled.values, force_k=args.k)
     print(f"Optimal k: {best_k} (silhouette={silhouettes[best_k]:.4f})")
     plot_selection(inertias, silhouettes, best_k, output_dir)
 

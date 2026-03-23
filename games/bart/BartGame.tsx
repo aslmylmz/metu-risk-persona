@@ -110,6 +110,20 @@ function generateSessionConfig(): BalloonConfig[] {
     return configs.map((c, idx) => ({ ...c, id: idx + 1 }));
 }
 
+// ── Turkish label maps ───────────────────────────────────────────────────────
+
+const COLOR_TR: Record<string, string> = {
+    purple: "Mor",
+    teal: "Camgöbeği",
+    orange: "Turuncu",
+};
+
+const RISK_TR: Record<string, string> = {
+    Low: "Düşük",
+    Medium: "Orta",
+    High: "Yüksek",
+};
+
 // ── Component ───────────────────────────────────────────────────────────────
 
 interface BartGameProps {
@@ -211,7 +225,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         if (explode) {
             recordEvent("explode", { pump_count: newPumps });
             setCurrentBalloon((b) => ({ ...b, pumps: newPumps, status: "exploded" }));
-            setFeedbackMessage("POPPED! $0.00 for this balloon.");
+            setFeedbackMessage("PATLADI! Bu balon için $0,00.");
             setGamePhase("feedback");
 
             setTimeout(() => {
@@ -254,7 +268,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         const money = currentBalloon.pumps * 0.25;
         setTotalScore((s) => s + money);
         setCurrentBalloon((b) => ({ ...b, status: "collected" }));
-        setFeedbackMessage(`Collected $${money.toFixed(2)}!`);
+        setFeedbackMessage(`Toplandı! $${money.toFixed(2)}`);
         setGamePhase("feedback");
 
         setTimeout(() => {
@@ -410,7 +424,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                             color: "#fff",
                         }}
                     >
-                        Balloon Analogue Risk Task
+                        Balon Analog Risk Görevi
                     </h2>
                     <p
                         style={{
@@ -420,13 +434,13 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                             lineHeight: 1.6,
                         }}
                     >
-                        Pump the balloon to earn money ($0.25 per pump). Each pump increases the risk of
-                        popping. Collect your money before it pops!
+                        Balonu şişirerek para kazanın ($0,25/şişirme). Her şişirme patlama riskini
+                        artırır. Patlamadan önce paranızı toplayın!
                     </p>
                     <p
                         style={{ color: "#6B7280", fontSize: "0.85rem" }}
                     >
-                        {TOTAL_BALLOONS} balloons · Space to pump · Enter to collect
+                        {TOTAL_BALLOONS} balon · Boşluk: şişir · Enter: topla
                     </p>
                     <button
                         onClick={startGame}
@@ -454,7 +468,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                 "0 4px 15px rgba(99,102,241,0.4)";
                         }}
                     >
-                        Start Assessment
+                        Göreve Başla
                     </button>
                 </div>
             )}
@@ -473,14 +487,14 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         }}
                     >
                         <span style={{ color: "#9CA3AF", fontSize: "0.9rem" }}>
-                            Balloon{" "}
+                            Balon{" "}
                             <span style={{ color: "#fff", fontWeight: 700 }}>
                                 {Math.min(balloonCount, TOTAL_BALLOONS)}
                             </span>
                             /{TOTAL_BALLOONS}
                         </span>
                         <span style={{ color: "#9CA3AF", fontSize: "0.9rem" }}>
-                            Total{" "}
+                            Toplam{" "}
                             <span style={{ color: "#22C55E", fontWeight: 700 }}>
                                 ${totalScore.toFixed(2)}
                             </span>
@@ -603,7 +617,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                 boxShadow: "0 3px 10px rgba(249,115,22,0.3)",
                             }}
                         >
-                            🎈 Pump (Space)
+                            🎈 Şişir (Boşluk)
                         </button>
                         <button
                             onClick={handleCollect}
@@ -635,7 +649,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                 boxShadow: "0 3px 10px rgba(34,197,94,0.3)",
                             }}
                         >
-                            💰 Collect (Enter)
+                            💰 Topla (Enter)
                         </button>
                     </div>
 
@@ -653,7 +667,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         {completedBalloons.map((b) => (
                             <div
                                 key={b.id}
-                                title={`Balloon ${b.id}: ${b.pumps} pumps — ${b.status}`}
+                                title={`Balon ${b.id}: ${b.pumps} pompa — ${b.status === "collected" ? "toplandı" : "patladı"}`}
                                 style={{
                                     width: 24,
                                     height: 24,
@@ -685,14 +699,14 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                     <h2
                         style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff" }}
                     >
-                        Assessment Complete
+                        Değerlendirme Tamamlandı
                     </h2>
                     <p style={{ color: "#9CA3AF" }}>
-                        Total Earned:{" "}
+                        Toplam Kazanç:{" "}
                         <span style={{ color: "#22C55E", fontWeight: 700 }}>
                             ${totalScore.toFixed(2)}
                         </span>{" "}
-                        across {TOTAL_BALLOONS} balloons
+                        / {TOTAL_BALLOONS} balon
                     </p>
 
                     {/* Balloon history summary */}
@@ -744,7 +758,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                             boxShadow: "0 4px 15px rgba(99,102,241,0.4)",
                         }}
                     >
-                        {isSubmitting ? "Analyzing..." : onComplete ? "Next" : "View My Results"}
+                        {isSubmitting ? "Analiz ediliyor..." : onComplete ? "Sonraki" : "Sonuçlarımı Gör"}
                     </button>
 
                     {feedbackMessage && (
@@ -762,7 +776,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                     <h2
                         style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff" }}
                     >
-                        Your Cognitive Profile
+                        Bilişsel Profiliniz
                     </h2>
 
                     {/* Adaptive Strategy Score - Hero Metric */}
@@ -779,7 +793,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                             }}
                         >
                             <div style={{ fontSize: "0.75rem", opacity: 0.9, marginBottom: "4px" }}>
-                                Adaptive Strategy Score
+                                Uyum Stratejisi Puanı
                             </div>
                             {results.raw_metrics.adaptive_strategy_score.toFixed(0)}/100
                         </div>
@@ -798,7 +812,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                     textAlign: "center",
                                 }}
                             >
-                                Performance by Balloon Color
+                                Balon Rengine Göre Performans
                             </h3>
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                                 {results.raw_metrics.color_metrics.map((cm) => (
@@ -826,16 +840,16 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                                         "#F97316",
                                                 }}
                                             />
-                                            <span style={{ color: "#fff", fontWeight: 600, textTransform: "capitalize" }}>
-                                                {cm.color} ({cm.risk_profile} risk)
+                                            <span style={{ color: "#fff", fontWeight: 600 }}>
+                                                {COLOR_TR[cm.color] ?? cm.color} ({RISK_TR[cm.risk_profile] ?? cm.risk_profile} risk)
                                             </span>
                                         </div>
                                         <div style={{ textAlign: "right" }}>
                                             <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff" }}>
-                                                {cm.average_pumps.toFixed(1)} pumps
+                                                {cm.average_pumps.toFixed(1)} pompa
                                             </div>
                                             <div style={{ fontSize: "0.75rem", color: "#6B7280" }}>
-                                                {(cm.explosion_rate * 100).toFixed(0)}% exploded
+                                                %{(cm.explosion_rate * 100).toFixed(0)} patladı
                                             </div>
                                         </div>
                                     </div>
@@ -856,7 +870,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                 textAlign: "center",
                             }}
                         >
-                            Learning & Adaptation
+                            Öğrenme ve Uyum
                         </h3>
                         <div
                             style={{
@@ -867,24 +881,24 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         >
                             {[
                                 {
-                                    label: "Learning Rate",
+                                    label: "Öğrenme Hızı",
                                     value: results.raw_metrics.learning_rate?.toFixed(2) || "0.00",
-                                    subtitle: "Behavioral adaptation",
+                                    subtitle: "Davranışsal uyum",
                                 },
                                 {
-                                    label: "Color Discrimination",
+                                    label: "Renk Ayrımı",
                                     value: results.raw_metrics.color_discrimination_index?.toFixed(2) || "0.00",
-                                    subtitle: "Pattern recognition",
+                                    subtitle: "Örüntü tanıma",
                                 },
                                 {
-                                    label: "Risk Adjustment",
+                                    label: "Risk Ayarlaması",
                                     value: results.raw_metrics.risk_adjustment_score?.toFixed(0) || "0",
-                                    subtitle: "Strategy calibration",
+                                    subtitle: "Strateji kalibrasyonu",
                                 },
                                 {
-                                    label: "Response Consistency",
+                                    label: "Tepki Tutarlılığı",
                                     value: results.raw_metrics.response_consistency?.toFixed(2) || "0.00",
-                                    subtitle: "Behavioral stability",
+                                    subtitle: "Davranışsal istikrar",
                                 },
                             ].map((metric) => (
                                 <div
@@ -943,7 +957,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                 textAlign: "center",
                             }}
                         >
-                            Behavioral Indices
+                            Davranışsal Göstergeler
                         </h3>
                         <div
                             style={{
@@ -954,24 +968,24 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         >
                             {[
                                 {
-                                    label: "Impulsivity",
-                                    value: `${((results.raw_metrics.impulsivity_index || 0) * 100).toFixed(0)}%`,
-                                    subtitle: "High-risk explosions",
+                                    label: "Dürtüsellik",
+                                    value: `%${((results.raw_metrics.impulsivity_index || 0) * 100).toFixed(0)}`,
+                                    subtitle: "Yüksek riskli patlamalar",
                                 },
                                 {
-                                    label: "Patience",
+                                    label: "Sabır",
                                     value: results.raw_metrics.patience_index?.toFixed(1) || "0.0",
-                                    subtitle: "Low-risk exploitation",
+                                    subtitle: "Düşük riskli istismar",
                                 },
                                 {
-                                    label: "Avg Pumps",
+                                    label: "Ort. Pompa",
                                     value: results.raw_metrics.average_pumps_adjusted.toFixed(1),
-                                    subtitle: "Overall risk appetite",
+                                    subtitle: "Genel risk iştahı",
                                 },
                                 {
-                                    label: "Explosion Rate",
-                                    value: `${(results.raw_metrics.explosion_rate * 100).toFixed(0)}%`,
-                                    subtitle: "Failure rate",
+                                    label: "Patlama Oranı",
+                                    value: `%${(results.raw_metrics.explosion_rate * 100).toFixed(0)}`,
+                                    subtitle: "Başarısızlık oranı",
                                 },
                             ].map((metric) => (
                                 <div
@@ -1030,7 +1044,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                     letterSpacing: "0.05em",
                                 }}
                             >
-                                Population Comparison
+                                Popülasyon Karşılaştırması
                             </h3>
                             {results.normalized_scores.map((score) => (
                                 <div
@@ -1054,7 +1068,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                                 fontSize: "0.95rem",
                                             }}
                                         >
-                                            {score.percentile.toFixed(0)}th
+                                            {score.percentile.toFixed(0)}.
                                         </span>
                                         <span
                                             style={{
@@ -1093,7 +1107,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                             e.currentTarget.style.background = "rgba(255,255,255,0.08)";
                         }}
                     >
-                        Play Again
+                        Tekrar Oyna
                     </button>
                 </div>
             )}

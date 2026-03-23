@@ -3,47 +3,45 @@ METU Risk Persona — Clustering Summary
 
 Algorithm: K-Means
 Optimal k: 3 (by silhouette)
-Silhouette: 0.1964
+Silhouette: 0.4745
 
-  k=2: 0.1655
-  k=3: 0.1964 <- best
+  k=2: 0.4126
+  k=3: 0.4745 <- best
+  k=4: 0.4999
+  k=5: 0.4950
+  k=6: 0.3661
 
 Cluster sizes:
-  Cluster 0: n=18 (30.0%)
-  Cluster 1: n=23 (38.3%)
-  Cluster 2: n=19 (31.7%)
+  Cluster 0: n=3 (30.0%)
+  Cluster 1: n=4 (40.0%)
+  Cluster 2: n=3 (30.0%)
 
 Top features per cluster (|z| > 0.3):
 
   Cluster 0:
-    ↑ bart_rng_normalized_pumps: z=1.28
-    ↑ bart_risk_sensitivity: z=0.44
-    ↓ bart_patience_normalized: z=-0.32
+    ↓ dospert_financial: z=-1.10
+    ↓ bart_rng_normalized_pumps: z=-1.03
+    ↑ bart_impulsivity_index: z=0.40
 
   Cluster 1:
-    ↓ bart_rng_normalized_pumps: z=-0.73
-    ↓ bart_patience_normalized: z=-0.69
-    ↓ bart_impulsivity_index: z=-0.40
+    ↓ bart_impulsivity_index: z=-1.02
+    ↑ bart_rng_normalized_pumps: z=0.97
+    ↑ dospert_financial: z=0.38
 
   Cluster 2:
-    ↑ bart_patience_normalized: z=1.14
-    ↑ bart_impulsivity_index: z=0.42
-    ↓ bart_rng_normalized_pumps: z=-0.33
+    ↑ bart_impulsivity_index: z=0.96
+    ↑ dospert_financial: z=0.60
 
 PCA loadings:
 
   PC1:
-    + bart_risk_sensitivity: 0.724
-    + bart_rng_normalized_pumps: 0.489
-    + bart_impulsivity_index: 0.400
-    - bart_patience_normalized: -0.269
-    + dospert_financial: 0.060
+    + bart_rng_normalized_pumps: 0.627
+    - bart_impulsivity_index: -0.583
+    + dospert_financial: 0.516
 
   PC2:
-    + dospert_financial: 0.647
-    - bart_patience_normalized: -0.617
-    - bart_impulsivity_index: -0.446
-    - bart_risk_sensitivity: -0.033
-    - bart_rng_normalized_pumps: -0.006
+    + dospert_financial: 0.821
+    + bart_impulsivity_index: 0.546
+    - bart_rng_normalized_pumps: -0.167
 
 Nominal distributions:
