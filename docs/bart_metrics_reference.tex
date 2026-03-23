@@ -47,6 +47,8 @@
     commentstyle=\color{codecomment}\itshape,
     stringstyle=\color{codestring},
     breaklines=true,
+    breakatwhitespace=false,
+    postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
     frame=single,
     rulecolor=\color{black!20},
     xleftmargin=1em,
@@ -66,6 +68,8 @@
     commentstyle=\color{codecomment}\itshape,
     stringstyle=\color{codestring},
     breaklines=true,
+    breakatwhitespace=false,
+    postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
     frame=single,
     rulecolor=\color{black!20},
     xleftmargin=1em,
@@ -1141,45 +1145,47 @@ High Explosion Penalty     & \texttt{explosion\_penalty} $> 0.3$ \\
 \label{sec:classification}
 % ──────────────────────────────────────────────────────────────────────────
 
-\begin{footnotesize}
+{%
+\scriptsize
 \setlength{\tabcolsep}{4pt}
-\begin{longtable}{@{}p{5.2cm}llc@{}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.8cm}llc@{}}
 \toprule
-\textbf{Metric} & \textbf{Type} & \textbf{Data Source} & \textbf{Used in Clustering} \\
+\textbf{Metric} & \textbf{Type} & \textbf{Data Source} & \textbf{Clustering} \\
 \midrule
 \endhead
-\texttt{average\_pumps\_adjusted}        & Descriptive & Collected only     & No \\
-\texttt{avg\_pumps\_all\_balloons}       & Descriptive & All balloons       & No \\
-\texttt{explosion\_rate}                 & Outcome     & All balloons       & No \\
-\texttt{mean\_latency\_between\_pumps}   & Temporal    & All balloons       & No \\
-\texttt{money\_collected}                & Outcome     & Collected only     & No \\
-\texttt{money\_efficiency}               & Outcome     & Collected only     & No \\
-\texttt{rng\_normalized\_pumps}          & Behavioral  & Collected only     & Yes \\
-\texttt{impulsivity\_index}              & Behavioral  & Composite          & Yes \\
-\texttt{patience\_index\_normalized}     & Behavioral  & Collected purple   & No \\
-\texttt{orange\_avg\_pumps}              & Behavioral  & Collected orange   & No \\
-\texttt{patience\_index}                 & Behavioral  & Collected purple   & No \\
-\texttt{learning\_rate}                  & Adaptation  & Collected / color  & No \\
-\texttt{half\_split\_learning\_rate}     & Adaptation  & Collected / color  & No \\
-\texttt{ev\_ratio\_score}               & Calibration & Collected / color  & No \\
-\texttt{explosion\_penalty}              & Calibration & All balloons       & No \\
-\texttt{risk\_calibration\_score}        & Calibration & Mixed              & No \\
-\texttt{ev\_efficiency\_differentiation} & Calibration & Collected / color  & No \\
-\texttt{flat\_strategy\_detected}        & Calibration & All balloons       & No \\
-\texttt{color\_discrimination\_index}    & Legacy      & Collected / color  & No \\
-\texttt{risk\_sensitivity}               & Legacy      & Collected / color  & No \\
-\texttt{risk\_adjustment\_score}         & Legacy      & Collected / color  & No \\
-\texttt{response\_consistency}           & Temporal    & All latencies      & No \\
-\texttt{within\_balloon\_consistency}    & Temporal    & Per-balloon lat.   & No \\
-\texttt{between\_balloon\_consistency}   & Strategic   & Collected / color  & No \\
-\texttt{adaptive\_strategy\_score}       & Composite   & All collected      & No \\
-\texttt{session\_valid}                  & Validation  & All events         & No \\
+\texttt{average\_pumps\_adjusted}          & Descriptive & Collected only    & No \\
+\texttt{avg\_pumps\_all\_balloons}         & Descriptive & All balloons      & No \\
+\texttt{explosion\_rate}                   & Outcome     & All balloons      & No \\
+\texttt{mean\_latency\_between\_pumps}     & Temporal    & All balloons      & No \\
+\texttt{money\_collected}                  & Outcome     & Collected only    & No \\
+\texttt{money\_efficiency}                 & Outcome     & Collected only    & No \\
+\texttt{rng\_normalized\_pumps}            & Behavioral  & Collected only    & Yes \\
+\texttt{impulsivity\_index}                & Behavioral  & Composite         & Yes \\
+\texttt{patience\_index\_normalized}       & Behavioral  & Collected purple  & No \\
+\texttt{orange\_avg\_pumps}                & Behavioral  & Collected orange  & No \\
+\texttt{patience\_index}                   & Behavioral  & Collected purple  & No \\
+\texttt{learning\_rate}                    & Adaptation  & Collected / color & No \\
+\texttt{half\_split\_learning\_rate}       & Adaptation  & Collected / color & No \\
+\texttt{ev\_ratio\_score}                  & Calibration & Collected / color & No \\
+\texttt{explosion\_penalty}                & Calibration & All balloons      & No \\
+\texttt{risk\_calibration\_score}          & Calibration & Mixed             & No \\
+\texttt{ev\_efficiency\_differentiation}   & Calibration & Collected / color & No \\
+\texttt{flat\_strategy\_detected}          & Calibration & All balloons      & No \\
+\texttt{color\_discrimination\_index}      & Legacy      & Collected / color & No \\
+\texttt{risk\_sensitivity}                 & Legacy      & Collected / color & No \\
+\texttt{risk\_adjustment\_score}           & Legacy      & Collected / color & No \\
+\texttt{response\_consistency}             & Temporal    & All latencies     & No \\
+\texttt{within\_balloon\_consistency}      & Temporal    & Per-balloon lat.  & No \\
+\texttt{between\_balloon\_consistency}     & Strategic   & Collected / color & No \\
+\texttt{adaptive\_strategy\_score}         & Composite   & All collected     & No \\
+\texttt{session\_valid}                    & Validation  & All events        & No \\
 \bottomrule
 \end{longtable}
-\end{footnotesize}
+}%
 
 Clustering uses three features: \texttt{dospert\_financial},
-\texttt{bart\_rng\_normalized\_pumps}, and \texttt{bart\_impulsivity\_index}.
+\texttt{bart\_rng\_\allowbreak{}normalized\_pumps}, and
+\texttt{bart\_impulsivity\_\allowbreak{}index}.
 
 
 % ──────────────────────────────────────────────────────────────────────────
@@ -1346,6 +1352,7 @@ People who \emph{say} they take financial risks and people who
 is the core convergent validity finding.
 
 
+\clearpage
 % ──────────────────────────────────────────────────────────────────────────
 \section{Appendix: Sample Session Walkthrough}
 % ──────────────────────────────────────────────────────────────────────────
