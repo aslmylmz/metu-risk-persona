@@ -142,25 +142,45 @@ First, because there is no hidden breakpoint drawn ahead of time, each individua
 pump is a genuinely random event---the balloon will always pop once you reach
 \texttt{maxPumps}, but until then every press of the button is its own coin flip.
 Second, and maybe less obvious, the expected-value-optimal place to stop turns out
-to be well below $\texttt{maxPumps}/2$. A mathematical audit of the EV curve under
-equation~\eqref{eq:explosion} shows that the peak occurs at approximately
-$\sqrt{\texttt{maxPumps}}$:
+to be well below $\texttt{maxPumps}/2$.
+
+\subsubsection*{Deriving the EV-Optimal Stop}
+
+If you stop at pump $s$ and the balloon has survived all $s$ pumps, you collect
+$s$ units of reward. The probability of surviving through pump $s$ under our
+model is:
+
+\begin{equation}
+P(\text{survive } s \text{ pumps}) = \prod_{k=1}^{s}\left(1 - \frac{k}{N}\right)
+\end{equation}
+
+so the expected value at stopping point $s$ is:
+
+\begin{equation}
+\label{eq:ev}
+\text{EV}(s, N) = s \cdot \prod_{k=1}^{s}\left(1 - \frac{k}{N}\right)
+\end{equation}
+
+We find the optimal stop $s^*$ by evaluating this for every integer $s$ from
+$1$ to $N$ and picking the $s$ that gives the highest EV. The scoring engine
+does exactly this via brute-force enumeration (see \texttt{\_compute\_ev\_optimal}
+in \texttt{bart.py}). A continuous approximation gives $s^* \approx \sqrt{N}$,
+but the actual discrete peaks are slightly below that:
 
 \begin{table}[H]
 \centering
-\begin{tabular}{@{}llccc@{}}
+\begin{tabular}{@{}llcccc@{}}
 \toprule
-\textbf{Color} & \textbf{Hex} & \textbf{\texttt{maxPumps}} & \textbf{Risk Level} & \textbf{EV-Optimal Stop} \\
+\textbf{Color} & \textbf{Hex} & \textbf{\texttt{maxPumps}} & \textbf{Risk Level} & \textbf{EV-Optimal Stop} & \textbf{Peak EV} \\
 \midrule
-\textcolor{purpleballoon}{Purple} & \texttt{\#A855F7} & 128 & Low    & ${\sim}\,12$ pumps \\
-\textcolor{tealballoon}{Teal}     & \texttt{\#14B8A6} & 32  & Medium & ${\sim}\,6$ pumps  \\
-\textcolor{orangeballoon}{Orange} & \texttt{\#F97316} & 8   & High   & ${\sim}\,2$ pumps  \\
+\textcolor{purpleballoon}{Purple} & \texttt{\#A855F7} & 128 & Low    & 11 pumps & 6.46 \\
+\textcolor{tealballoon}{Teal}     & \texttt{\#14B8A6} & 32  & Medium & 5 pumps  & 3.04 \\
+\textcolor{orangeballoon}{Orange} & \texttt{\#F97316} & 8   & High   & 2 pumps  & 1.31 \\
 \bottomrule
 \end{tabular}
 \caption{Balloon color profiles. We picked neutral colors on purpose to
 steer clear of common psychological associations (e.g.\ red\,$=$\,danger).
-Optimal stops are approximately $\sqrt{N}$, derived from the EV-curve peak of
-the sequential Bernoulli model.}
+Optimal stops are computed by maximizing equation~\eqref{eq:ev} over integer $s$.}
 \end{table}
 
 \subsection{Session Generation}
@@ -543,7 +563,7 @@ smart move is to pump aggressively.
 
 In the sample session we get $10.2$ (raw) and $0.080$ (normalized)---the
 participant was not coming close to exploiting the headroom that purple balloons
-offer, though they were pumping near the EV-optimal point of~12.
+offer, though they were pumping near the EV-optimal point of~11.
 
 
 \subsection{\texttt{orange\_avg\_pumps}}
@@ -830,7 +850,7 @@ descriptive use.
 
 \subsubsection*{\texttt{risk\_adjustment\_score}}
 
-Linear distance from hardcoded optimal stops (12/6/2), scored per color
+Linear distance from hardcoded optimal stops (11/5/2), scored per color
 with symmetric penalty for over- and under-pumping. Range: $[0, 100]$.
 Superseded by \texttt{ev\_ratio\_score}, which uses the actual EV curve
 shape and EV-weighted averaging rather than a linear penalty.

@@ -12,11 +12,11 @@ An open-source behavioural assessment platform that combines a multi-colour Ball
 
 The task presents participants with 30 balloons (10 per colour, shuffled) drawn from three risk tiers:
 
-| Colour | Max Pumps | Risk Tier | Optimal Stop (approx.) |
-|--------|-----------|-----------|------------------------|
-| Purple | 128       | Low       | ~12 pumps              |
-| Teal   | 32        | Medium    | ~6 pumps               |
-| Orange | 8         | High      | ~2 pumps               |
+| Colour | Max Pumps | Risk Tier | EV-Optimal Stop | Peak EV |
+|--------|-----------|-----------|-----------------|---------|
+| Purple | 128       | Low       | 11 pumps        | 6.46    |
+| Teal   | 32        | Medium    | 5 pumps         | 3.04    |
+| Orange | 8         | High      | 2 pumps         | 1.31    |
 
 Neutral colours are used deliberately to avoid psychological bias (e.g., red = danger).
 
@@ -28,7 +28,7 @@ Each pump attempt *k* is an independent Bernoulli trial with linearly increasing
 P(explode at pump k) = k / maxPumps
 ```
 
-This is a sequential model, not a pre-drawn uniform threshold. The expected-value-maximising stopping point under this model is close to `sqrt(maxPumps)`, which differs from the `maxPumps / 2` heuristic of the classic uniform BART.
+This is a sequential model, not a pre-drawn uniform threshold. The EV-optimal stopping point is found by maximising `EV(s, N) = s * product(1 - k/N, k=1..s)` over integer `s`. A continuous approximation gives `sqrt(N)`, but the exact discrete peaks are 11/5/2 for our three colours.
 
 ### Session Structure
 
