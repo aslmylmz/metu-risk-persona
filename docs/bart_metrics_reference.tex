@@ -94,7 +94,7 @@
 % ── Header / Footer ──────────────────────────────────────────────────────
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small BART Metrics Reference --- Full Technical Documentation}
+\fancyhead[L]{\small BART Metrics Reference}
 \fancyhead[R]{\small\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
@@ -139,7 +139,7 @@ const explode = newPumps >= maxPumps
 
 There are two things worth noting here.
 First, because there is no hidden breakpoint drawn ahead of time, each individual
-pump is a genuinely random event---the balloon will always pop once you reach
+pump is a genuinely random event. The balloon will always pop once you reach
 \texttt{maxPumps}, but until then every press of the button is its own coin flip.
 Second, and maybe less obvious, the expected-value-optimal place to stop turns out
 to be well below $\texttt{maxPumps}/2$.
@@ -185,7 +185,7 @@ Optimal stops are computed by maximizing equation~\eqref{eq:ev} over integer $s$
 
 \subsection{Session Generation}
 
-Each session consists of exactly 30 balloons---10 of each color---presented in a
+Each session consists of exactly 30 balloons (10 of each color), presented in a
 random order. The shuffling is done via Fisher--Yates so that no predictable
 sequence leaks through:
 
@@ -241,8 +241,8 @@ def _segment_balloons(events):
     return balloons
 \end{lstlisting}
 
-Running this on our sample session produces 30 balloon segments---10~purple,
-10~teal, 10~orange---as expected.
+Running this on our sample session produces 30 balloon segments:
+10~purple, 10~teal, 10~orange, as expected.
 
 
 % ──────────────────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ def _prefer_collected(collected, all_data, min_count=2):
     return all_data, True            # fallback + warning
 \end{lstlisting}
 
-For orange, this fallback fires pretty routinely---the probability of surviving even
+For orange, this fallback fires pretty routinely. The probability of surviving even
 4 pumps on an orange balloon is only about $20.5\%$
 ($\frac{7}{8} \times \frac{6}{8} \times \frac{5}{8} \times \frac{4}{8} \approx 0.205$),
 so in most sessions you end up with very few (or zero) collected orange balloons.
@@ -340,7 +340,7 @@ Just the fraction of balloons that popped:
 
 In our sample session that is $20/30 = 0.667$. Keep in mind that two people
 playing exactly the same strategy can end up with noticeably different explosion
-rates on any given run---the task is stochastic, after all.
+rates on any given run, since the task is stochastic.
 
 
 \subsection{\texttt{mean\_latency\_between\_pumps}}
@@ -371,7 +371,7 @@ As an example, here are the inter-pump intervals for balloon~1
 \text{Diffs (ms)} &= [583.4,\; 766.7,\; 599.8,\; 733.5,\; 650.0]
 \end{align*}
 Those five intervals go into the global pool. Across all 30 balloons in the
-session, the overall mean turns out to be $555.4$\,ms---fairly deliberate.
+session, the overall mean turns out to be $555.4$\,ms, which is fairly deliberate.
 Fast or impulsive pumpers typically sit somewhere around ${\sim}200$\,ms.
 
 
@@ -400,11 +400,58 @@ EV-optimal play:
     \right)
 \end{equation}
 
-With the standard 10/10/10 balloon configuration, optimal expected earnings
-are approximately \$27.03 (confirmed via 10k-session simulation,
-mean = \$27.09, SD = \$4.68). This grounds the composite in actual outcome
---- two participants with identical prescriptive metrics but different
-realized earnings will score differently.
+The denominator is the theoretical expected earnings under optimal play.
+For each color, the EV-optimal stop $s^*$ yields a per-balloon expected
+reward (equation~\eqref{eq:ev}), which we multiply by the number of
+balloons and the per-pump reward:
+
+\begin{equation}
+    \text{optimal\_earnings} = \sum_c n_c \cdot \text{EV}(s^*_c,\, N_c) \cdot \$0.25
+\end{equation}
+
+With the standard 10/10/10 configuration:
+\begin{align*}
+    10 \times \text{EV}(11, 128) \times 0.25 &= 10 \times 6.463 \times 0.25 = \$16.16 \\
+    10 \times \text{EV}(5, 32) \times 0.25   &= 10 \times 3.038 \times 0.25 = \$7.60 \\
+    10 \times \text{EV}(2, 8) \times 0.25    &= 10 \times 1.313 \times 0.25 = \$3.28 \\
+    \text{Total} &= \$27.03
+\end{align*}
+
+To confirm this analytical baseline against the stochastic reality of our
+explosion model, we ran a Monte Carlo simulation (10\,000 sessions of
+30 balloons each, always stopping at $s^*$ per color):
+
+\begin{lstlisting}[style=pythonstyle,caption={Monte Carlo validation of EV-optimal earnings.}]
+import numpy as np
+
+def simulate_session(n_sessions=10_000):
+    colors = [("purple", 128, 11), ("teal", 32, 5), ("orange", 8, 2)]
+    earnings = []
+    for _ in range(n_sessions):
+        total = 0.0
+        for _, max_pumps, optimal_stop in colors:
+            for _ in range(10):       # 10 balloons per color
+                survived = True
+                for k in range(1, optimal_stop + 1):
+                    if np.random.random() < k / max_pumps:
+                        survived = False
+                        break
+                if survived:
+                    total += optimal_stop * 0.25
+        earnings.append(total)
+    return np.mean(earnings), np.std(earnings)
+
+mean, sd = simulate_session()
+# mean ~ $27.09, sd ~ $4.68
+\end{lstlisting}
+
+The simulation yields mean~$=~\$27.09$, SD~$=~\$4.68$, closely matching
+the analytical \$27.03. The small difference is because the analytical
+value assumes the EV is earned on every balloon, while the simulation
+accounts for the fact that some balloons still explode even under optimal
+play. Two participants with identical prescriptive metrics but different
+realized earnings will score differently, which is the point of including
+this component.
 
 
 % ──────────────────────────────────────────────────────────────────────────
@@ -457,7 +504,7 @@ Orange & 10 & 0 & 2.9  & 1.00 & Yes \\
 \end{tabular}
 \caption{Color breakdown for the sample session.  Notice how the gap between
 \texttt{behavioral\_avg\_pumps} and \texttt{average\_pumps} widens as the
-explosion rate climbs---orange is the extreme case here.}
+explosion rate climbs; orange is the extreme case here.}
 \end{table}
 
 
@@ -492,7 +539,7 @@ rng_normalized_pumps = np.mean(normalized)
 This lives on $[0, 1]$. If someone scores $0.25$, they were using roughly
 a quarter of each balloon's capacity on average. The normalization gets rid of
 the scale difference between colors ($128$ versus $32$ versus $8$), which makes
-this metric directly comparable across risk levels---something that
+this metric directly comparable across risk levels, something that
 \texttt{average\_pumps\_adjusted} simply cannot do.
 
 
@@ -552,7 +599,7 @@ regardless of how many balloons were collected.
 \subsection{\texttt{patience\_index} and \texttt{patience\_index\_normalized}}
 
 These are basically the mirror image of the impulsivity index. Here we look at
-the mean pump count on collected purple balloons---the safest color, where the
+the mean pump count on collected purple balloons, the safest color, where the
 smart move is to pump aggressively.
 
 \begin{align}
@@ -561,7 +608,7 @@ smart move is to pump aggressively.
         \frac{\texttt{patience\_index}}{128},\; 0,\; 1\right)
 \end{align}
 
-In the sample session we get $10.2$ (raw) and $0.080$ (normalized)---the
+In the sample session we get $10.2$ (raw) and $0.080$ (normalized). The
 participant was not coming close to exploiting the headroom that purple balloons
 offer, though they were pumping near the EV-optimal point of~11.
 
@@ -615,8 +662,8 @@ learning_rate = np.clip(np.mean(learning_slopes), -1.0, 1.0)
 
 The range is $[-1, 1]$. In our sample session it comes out to $0.059$.
 
-The obvious weakness here is sample size. With only 10 trials per color---and
-frequently fewer than that once you filter down to collected ones---a single
+The obvious weakness here is sample size. With only 10 trials per color
+(and frequently fewer than that once you filter down to collected ones), a single
 outlier trial can throw the regression off quite a bit.
 
 
@@ -785,7 +832,7 @@ level is a failure to differentiate strategy for that level.
 A common objection here is that risk-averse people who pump 2--3 times on
 everything will naturally collect orange and therefore look differentiated.
 That is true, but the EV-efficiency itself will be low for purple (they are
-way under the optimal) --- so the differentiation score might be moderate,
+way under the optimal), so the differentiation score might be moderate,
 but their overall calibration will be poor. These two metrics are meant to
 be read together.
 
@@ -794,7 +841,7 @@ be read together.
 
 A boolean flag that fires when the participant appears to use an
 undifferentiated pumping strategy. The check looks at the CV of raw
-per-color mean pump counts and the explosion pattern --- if pump counts
+per-color mean pump counts and the explosion pattern. If pump counts
 barely change across colors and the explosion pattern matches what you
 would expect from someone ignoring the color cue, the flag goes up.
 
@@ -843,7 +890,7 @@ r, _ = stats.pearsonr(capacities, pumps)
 \end{lstlisting}
 
 An $r$ above $0.7$ indicates strong sensitivity to risk level;
-$r \approx 0$ means a flat strategy. A low $r$ is ambiguous---the person
+$r \approx 0$ means a flat strategy. A low $r$ is ambiguous: the person
 may genuinely not differentiate or may be choosing not to. Kept for
 descriptive use.
 
@@ -934,7 +981,7 @@ between_balloon_cv = np.mean(per_color_cvs) if per_color_cvs else 0.0
 \toprule
 \textbf{Within CV} & \textbf{Between CV} & \textbf{What it suggests} \\
 \midrule
-Low  & Low  & Very consistent---same strategy, steady hands \\
+Low  & Low  & Very consistent, same strategy, steady hands \\
 Low  & High & Adapts strategy across balloons, but executes each one cleanly \\
 High & High & Erratic across the board \\
 High & Low  & One fixed strategy, but shaky execution within each trial \\
@@ -956,16 +1003,15 @@ efficiency.
 
 \begin{equation}
 \boxed{
-\texttt{adaptive\_strategy\_score} =
-w_L \cdot \text{Learning}
-\;+\;
-w_C \cdot \text{Calibration}
-\;+\;
-w_D \cdot \text{Differentiation}
-\;+\;
-0.10 \cdot \text{Money}
+\texttt{adaptive\_strategy} =
+w_L \!\cdot\! L
++ w_C \!\cdot\! C
++ w_D \!\cdot\! D
++ 0.10 \!\cdot\! M
 }
 \end{equation}
+
+where $L$ = Learning, $C$ = Calibration, $D$ = Differentiation, $M$ = Money efficiency.
 
 \begin{table}[H]
 \centering\small
@@ -1095,8 +1141,9 @@ High Explosion Penalty     & \texttt{explosion\_penalty} $> 0.3$ \\
 \label{sec:classification}
 % ──────────────────────────────────────────────────────────────────────────
 
-\begin{small}
-\begin{longtable}{@{}lllc@{}}
+\begin{footnotesize}
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}p{5.2cm}llc@{}}
 \toprule
 \textbf{Metric} & \textbf{Type} & \textbf{Data Source} & \textbf{Used in Clustering} \\
 \midrule
@@ -1129,7 +1176,7 @@ High Explosion Penalty     & \texttt{explosion\_penalty} $> 0.3$ \\
 \texttt{session\_valid}                  & Validation  & All events         & No \\
 \bottomrule
 \end{longtable}
-\end{small}
+\end{footnotesize}
 
 Clustering uses three features: \texttt{dospert\_financial},
 \texttt{bart\_rng\_normalized\_pumps}, and \texttt{bart\_impulsivity\_index}.
@@ -1159,7 +1206,7 @@ singleton clusters.
 \textbf{Feature} & \textbf{Source} & \textbf{What it captures} \\
 \midrule
 \texttt{dospert\_financial}        & DOSPERT-30 & Self-reported financial risk tolerance \\
-\texttt{bart\_rng\_normalized\_pumps} & BART    & Capacity-normalized pumping across collected balloons --- how close to the limit they push \\
+\texttt{bart\_rng\_normalized\_pumps} & BART    & Capacity-normalized pumping across collected balloons; how close to the limit they push \\
 \texttt{bart\_impulsivity\_index}     & BART    & Composite timing + explosion + orange signal (Section~\ref{sec:impulsivity}) \\
 \bottomrule
 \end{tabular}
@@ -1256,20 +1303,20 @@ C2 & Impulsive Risk-Seekers     & z $= +0.60$ & $\approx 0$ & z $= +0.96$ \\
 \label{fig:profiles}
 \end{figure}
 
-\textbf{C0 --- Consistent Conservatives} ($n = 3$). Low self-reported
+\textbf{C0: Consistent Conservatives} ($n = 3$). Low self-reported
 financial risk tolerance and low behavioral risk on BART. The mild
 impulsivity uptick suggests that when they do pump, they are not
-particularly strategic about it --- conservative by conviction, not by
+particularly strategic about it. Conservative by conviction, not by
 calculation.
 
-\textbf{C1 --- Deliberate Risk-Takers} ($n = 4$). Push close to balloon
-limits (high normalized pumps) with low impulsivity --- slow, consistent
+\textbf{C1: Deliberate Risk-Takers} ($n = 4$). Push close to balloon
+limits (high normalized pumps) with low impulsivity: slow, consistent
 timing and controlled explosion rates. Their self-report is only
 moderately above average, suggesting they may not perceive their own
 behavior as particularly risky.
 
-\textbf{C2 --- Impulsive Risk-Seekers} ($n = 3$). Report the highest
-financial risk tolerance and act on it impulsively --- fast clicking,
+\textbf{C2: Impulsive Risk-Seekers} ($n = 3$). Report the highest
+financial risk tolerance and act on it impulsively, with fast clicking and
 excess explosions. Their normalized pumps are near zero because they
 blow up before reaching their intended targets. They \emph{intend} to
 take risks but their approach is reactive, not strategic.
@@ -1295,7 +1342,7 @@ PC1 ($\sim$50\%) separates C1 from the rest along the
 PC2 ($\sim$37\%) is dominated by \texttt{dospert\_financial} (loading $= 0.821$),
 meaning the self-report and behavioral dimensions are close to orthogonal.
 People who \emph{say} they take financial risks and people who
-\emph{actually} take them on BART are not necessarily the same --- which
+\emph{actually} take them on BART are not necessarily the same, which
 is the core convergent validity finding.
 
 
