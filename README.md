@@ -45,17 +45,26 @@ metu-risk-persona/
 ├── .gitignore                          Git ignore rules
 ├── games/
 │   └── bart/
-│       └── BartGame.tsx                React/Next.js game client component
+│       ├── BartGame.tsx                React/Next.js game client component
+│       └── ResearchThankYou.tsx        Post-session risk profile display
 ├── scoring/
-│   ├── bart.py                         NumPy-vectorized BART scoring engine
+│   ├── bart.py                         EV-based BART scoring engine
 │   └── schemas/
 │       └── game_events.py              Pydantic event schemas and validators
 ├── clustering/
-│   └── clustering_pipeline.py          K-Means clustering with PCA visualization
+│   ├── clustering_pipeline.py          K-Means clustering with PCA visualization
+│   └── clustering_results/
+│       ├── clustered_participants.csv  Cluster assignments (N=10)
+│       ├── summary.txt                 Silhouette scores and cluster profiles
+│       ├── 01_k_selection.png          Elbow + silhouette plots
+│       ├── 02_cluster_profiles.png     Z-scored cluster centroids
+│       └── 03_pca_projection.png       PCA scatter plot
 ├── docs/
-│   ├── bart_metrics_reference.tex      LaTeX reference for metric definitions
+│   ├── bart_metrics_reference.tex      Full technical reference (all metrics)
 │   └── figures/
-│       └── .gitkeep
+│       ├── 01_k_selection.png
+│       ├── 02_cluster_profiles.png
+│       └── 03_pca_projection.png
 ├── data/
 │   └── synthetic/
 │       └── .gitkeep                    Real participant data is never committed
@@ -67,16 +76,15 @@ metu-risk-persona/
 
 ## Key Metrics
 
-The clustering pipeline operates on six behavioural features extracted from BART sessions:
+The scoring engine computes EV-based calibration metrics, a composite impulsivity index, and money efficiency among others. The clustering pipeline uses three features:
 
-| Feature | Description |
-|---------|-------------|
-| `rng_normalized_pumps` | Mean collected pumps normalised by each colour's maxPumps, averaged across colours. Measures overall risk appetite while controlling for colour difficulty. |
-| `impulsivity_index` | Proportion of balloons where the participant pumped beyond the EV-optimal stopping point. Higher values indicate greater impulsivity. |
-| `patience_index_normalized` | Mean time spent deliberating per pump, normalised to [0, 1]. Captures how cautiously participants approach each decision. |
-| `mean_latency_between_pumps` | Average inter-pump interval in milliseconds. Reflects motor tempo and deliberation speed. |
-| `between_balloon_consistency` | Coefficient of variation of pump counts across balloons. Lower values indicate a more consistent strategy. |
-| `adaptive_strategy_score` | Degree to which participants differentiate their pumping behaviour across the three colour tiers. Higher values indicate better calibration to risk levels. |
+| Feature | Source | Description |
+|---------|--------|-------------|
+| `dospert_financial` | DOSPERT-30 | Self-reported financial risk tolerance. |
+| `rng_normalized_pumps` | BART | Mean collected pumps normalised by each colour's maxPumps. Measures behavioural risk appetite while controlling for colour difficulty. |
+| `impulsivity_index` | BART | Composite of timing impulsivity (40%), excess explosions over EV-optimal baseline (40%), and orange signal (20%). Always computable regardless of collection counts. |
+
+Clustering runs on N=10 (prior-task participants excluded), yielding k=3 with silhouette = 0.475. See `docs/bart_metrics_reference.tex` for the full technical reference covering all metrics, composites, and archetype assignment logic.
 
 ---
 
