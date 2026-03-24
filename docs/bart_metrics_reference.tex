@@ -681,6 +681,25 @@ mark means).}
 \label{fig:mc_earnings}
 \end{figure}
 
+Figure~\ref{fig:mc_trajectories} takes a different angle on the same
+simulation: it plots cumulative earnings balloon-by-balloon for 500
+randomly selected sessions. The result is a trajectory fan that shows
+how earnings paths diverge as sessions progress. Most of the spread
+comes from the purple phase (balloons 1--10), where each collected
+balloon is worth \$2.75 but has a $41\%$ explosion rate. The teal and
+orange phases add relatively little additional fan width.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figures/06_mc_trajectories.png}
+\caption{Monte Carlo earnings trajectories (500 of 100\,000 sessions).
+Each faint line traces one session's cumulative earnings across 30
+balloons. Blue bands mark the 5th--95th, 10th--90th, and 25th--75th
+percentile envelopes. The solid blue line is the median; the dashed
+red line is the mean.}
+\label{fig:mc_trajectories}
+\end{figure}
+
 The simulation yields mean~$= \$27.04$, SD~$= \$4.75$, closely matching
 the analytical \$27.03. A few things worth noting from the results:
 

@@ -1,9 +1,10 @@
 """
 Monte Carlo simulation of EV-optimal play on the three-colour BART.
 
-Generates two figures for the technical reference:
+Generates three figures for the technical reference:
   04_ev_curves.png        – EV(s,N) curves for all three colours with optimal stops marked
   05_mc_earnings.png      – Histogram of simulated session earnings under optimal play
+  06_mc_trajectories.png  – Fan plot of cumulative earnings trajectories across sessions
 
 Usage:
     python scripts/monte_carlo_ev.py
@@ -88,13 +89,23 @@ def plot_ev_curves():
     print(f"Saved {OUTPUT_DIR}/04_ev_curves.png")
 
 
-# ── Figure 2: Monte Carlo earnings histogram ────────────────────────────
+# ── Simulation ───────────────────────────────────────────────────────────
 def run_simulation():
+    """Run MC simulation, returning final earnings and per-balloon trajectories."""
     rng = np.random.default_rng(SEED)
     earnings = np.zeros(N_SESSIONS)
-
-    # Per-colour simulation
     per_colour_earnings = {}
+
+    # Track cumulative earnings after each balloon (30 total)
+    total_balloons = sum(cfg["balloons"] for cfg in COLORS.values())
+    trajectories = np.zeros((N_SESSIONS, total_balloons + 1))  # col 0 = start at $0
+    balloon_idx = 0
+
+    # Build balloon order: all purple, then teal, then orange (matches task order)
+    balloon_order = []
+    for name, cfg in COLORS.items():
+        for _ in range(cfg["balloons"]):
+            balloon_order.append(name)
 
     for name, cfg in COLORS.items():
         N = cfg["N"]
@@ -103,21 +114,20 @@ def run_simulation():
         colour_earnings = np.zeros(N_SESSIONS)
 
         for b in range(n_balloons):
-            # For each balloon, simulate whether it survives s_star pumps
-            # Generate all explosion rolls at once: shape (N_SESSIONS, s_star)
             rolls = rng.random((N_SESSIONS, s_star))
-            thresholds = np.arange(1, s_star + 1) / N  # shape (s_star,)
-
-            # A balloon explodes if any roll < threshold
+            thresholds = np.arange(1, s_star + 1) / N
             exploded = np.any(rolls < thresholds, axis=1)
             survived = ~exploded
+            reward = survived * s_star * REWARD_PER_PUMP
 
-            colour_earnings += survived * s_star * REWARD_PER_PUMP
+            colour_earnings += reward
+            balloon_idx += 1
+            trajectories[:, balloon_idx] = trajectories[:, balloon_idx - 1] + reward
 
         per_colour_earnings[name] = colour_earnings
         earnings += colour_earnings
 
-    return earnings, per_colour_earnings
+    return earnings, per_colour_earnings, trajectories
 
 
 def plot_mc_histogram(earnings, per_colour_earnings):
@@ -262,7 +272,105 @@ def plot_mc_histogram(earnings, per_colour_earnings):
         print(f"    SD:                        ${np.std(ce):.2f}")
 
 
+# ── Figure 3: Trajectory fan plot ────────────────────────────────────────
+def plot_trajectories(trajectories):
+    """Fan plot of cumulative earnings across balloons, like MC price simulations."""
+    n_sessions, n_steps = trajectories.shape
+    balloons = np.arange(n_steps)  # 0..30
+
+    # Sample paths to draw (too many = unreadable)
+    N_PATHS = 500
+    rng_draw = np.random.default_rng(99)
+    sample_idx = rng_draw.choice(n_sessions, size=N_PATHS, replace=False)
+
+    fig, ax = plt.subplots(figsize=(14, 6.5))
+
+    # ── Percentile bands (filled) ──────────────────────────────────────
+    bands = [
+        (5, 95, "#3B82F6", 0.10),
+        (10, 90, "#3B82F6", 0.10),
+        (25, 75, "#3B82F6", 0.12),
+    ]
+    for lo, hi, color, alpha in bands:
+        p_lo = np.percentile(trajectories, lo, axis=0)
+        p_hi = np.percentile(trajectories, hi, axis=0)
+        ax.fill_between(balloons, p_lo, p_hi, alpha=alpha, color=color,
+                         linewidth=0)
+
+    # ── Individual paths ───────────────────────────────────────────────
+    # Use a colormap for visual variety like the reference images
+    cmap = plt.cm.gist_rainbow
+    path_colors = cmap(np.linspace(0, 1, N_PATHS))
+    rng_draw.shuffle(path_colors)
+
+    for i, idx in enumerate(sample_idx):
+        ax.plot(balloons, trajectories[idx], color=path_colors[i],
+                alpha=0.18, linewidth=0.6, zorder=2)
+
+    # ── Median and mean lines ──────────────────────────────────────────
+    median_line = np.median(trajectories, axis=0)
+    mean_line = np.mean(trajectories, axis=0)
+    ax.plot(balloons, median_line, color="white", linewidth=3.5, zorder=4)
+    ax.plot(balloons, median_line, color="#1E40AF", linewidth=2.2,
+            label=f"Median (final = ${median_line[-1]:.2f})", zorder=5)
+    ax.plot(balloons, mean_line, color="white", linewidth=3.5, zorder=4)
+    ax.plot(balloons, mean_line, color="#DC2626", linewidth=2.2,
+            linestyle="--",
+            label=f"Mean (final = ${mean_line[-1]:.2f})", zorder=5)
+
+    # ── Percentile labels at right edge ────────────────────────────────
+    for pct in [5, 25, 75, 95]:
+        val = np.percentile(trajectories[:, -1], pct)
+        ax.annotate(f"P{pct}: ${val:.0f}", xy=(n_steps - 1, val),
+                    xytext=(n_steps + 0.3, val), fontsize=8.5,
+                    color="#374151", va="center",
+                    arrowprops=dict(arrowstyle="-", color="#9CA3AF", lw=0.8))
+
+    # ── Color phase markers ────────────────────────────────────────────
+    phase_ends = [0, 10, 20, 30]
+    phase_labels = ["Purple\n(1-10)", "Teal\n(11-20)", "Orange\n(21-30)"]
+    phase_colors = ["#A855F7", "#14B8A6", "#F97316"]
+    for i in range(3):
+        mid = (phase_ends[i] + phase_ends[i + 1]) / 2
+        ax.axvline(phase_ends[i + 1], color=phase_colors[i], alpha=0.35,
+                   linewidth=1.2, linestyle=":", zorder=1)
+        ax.text(mid, -0.06, phase_labels[i], ha="center", va="top",
+                fontsize=8.5, color=phase_colors[i], fontweight="bold",
+                transform=ax.get_xaxis_transform())
+
+    ax.set_xlabel("Balloon Number", fontsize=12)
+    ax.set_ylabel("Cumulative Earnings ($)", fontsize=12)
+    ax.set_title(
+        f"Monte Carlo Earnings Trajectories ({N_PATHS} of {N_SESSIONS:,} sessions)",
+        fontsize=14, fontweight="bold",
+    )
+    ax.set_xlim(0, n_steps - 1)
+    ax.set_ylim(bottom=0)
+    ax.legend(fontsize=10, loc="upper left", framealpha=0.9)
+    ax.grid(True, alpha=0.20, linewidth=0.5)
+
+    # Dark background style to match the reference images
+    fig.patch.set_facecolor("#1a1a2e")
+    ax.set_facecolor("#16213e")
+    ax.tick_params(colors="#d1d5db")
+    ax.xaxis.label.set_color("#d1d5db")
+    ax.yaxis.label.set_color("#d1d5db")
+    ax.title.set_color("#f3f4f6")
+    for spine in ax.spines.values():
+        spine.set_color("#374151")
+    ax.grid(True, alpha=0.15, color="#4B5563", linewidth=0.5)
+    ax.legend(fontsize=10, loc="upper left", framealpha=0.85,
+              facecolor="#1e293b", edgecolor="#475569", labelcolor="#e5e7eb")
+
+    fig.tight_layout()
+    fig.savefig(f"{OUTPUT_DIR}/06_mc_trajectories.png", dpi=200,
+                bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"Saved {OUTPUT_DIR}/06_mc_trajectories.png")
+
+
 if __name__ == "__main__":
     plot_ev_curves()
-    earnings, per_colour_earnings = run_simulation()
+    earnings, per_colour_earnings, trajectories = run_simulation()
     plot_mc_histogram(earnings, per_colour_earnings)
+    plot_trajectories(trajectories)
