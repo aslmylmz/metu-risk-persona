@@ -274,96 +274,121 @@ def plot_mc_histogram(earnings, per_colour_earnings):
 
 # ── Figure 3: Trajectory fan plot ────────────────────────────────────────
 def plot_trajectories(trajectories):
-    """Fan plot of cumulative earnings across balloons, like MC price simulations."""
-    n_sessions, n_steps = trajectories.shape
-    balloons = np.arange(n_steps)  # 0..30
+    """Fan plot of cumulative earnings across balloons, styled after MC price sims."""
+    from matplotlib.collections import LineCollection
+    from matplotlib.colors import Normalize
 
-    # Sample paths to draw (too many = unreadable)
-    N_PATHS = 500
+    n_sessions, n_steps = trajectories.shape
+    x = np.arange(n_steps)
+
+    # Monotone interpolation to smooth discrete steps without artifacts
+    from scipy.interpolate import PchipInterpolator
+    x_smooth = np.linspace(0, n_steps - 1, 300)
+
+    N_PATHS = 800
     rng_draw = np.random.default_rng(99)
     sample_idx = rng_draw.choice(n_sessions, size=N_PATHS, replace=False)
 
-    fig, ax = plt.subplots(figsize=(14, 6.5))
+    fig, ax = plt.subplots(figsize=(15, 7))
 
-    # ── Percentile bands (filled) ──────────────────────────────────────
-    bands = [
-        (5, 95, "#3B82F6", 0.10),
-        (10, 90, "#3B82F6", 0.10),
-        (25, 75, "#3B82F6", 0.12),
-    ]
-    for lo, hi, color, alpha in bands:
+    # ── Percentile envelope (gradient fill) ───────────────────────────
+    pct_pairs = [(5, 95), (10, 90), (20, 80), (30, 70), (40, 60)]
+    n_bands = len(pct_pairs)
+    for i, (lo, hi) in enumerate(pct_pairs):
         p_lo = np.percentile(trajectories, lo, axis=0)
         p_hi = np.percentile(trajectories, hi, axis=0)
-        ax.fill_between(balloons, p_lo, p_hi, alpha=alpha, color=color,
-                         linewidth=0)
+        # Smooth the envelopes too
+        spl_lo = PchipInterpolator(x, p_lo)
+        spl_hi = PchipInterpolator(x, p_hi)
+        alpha = 0.06 + 0.04 * (n_bands - i) / n_bands
+        ax.fill_between(x_smooth, spl_lo(x_smooth), spl_hi(x_smooth),
+                         alpha=alpha, color="#60A5FA", linewidth=0)
 
-    # ── Individual paths ───────────────────────────────────────────────
-    # Use a colormap for visual variety like the reference images
-    cmap = plt.cm.gist_rainbow
-    path_colors = cmap(np.linspace(0, 1, N_PATHS))
-    rng_draw.shuffle(path_colors)
+    # ── Individual paths colored by final earnings ────────────────────
+    final_earnings = trajectories[sample_idx, -1]
+    norm = Normalize(vmin=np.percentile(final_earnings, 2),
+                     vmax=np.percentile(final_earnings, 98))
+    cmap = plt.cm.plasma
 
-    for i, idx in enumerate(sample_idx):
-        ax.plot(balloons, trajectories[idx], color=path_colors[i],
-                alpha=0.18, linewidth=0.6, zorder=2)
+    # Sort so extreme paths draw on top
+    sort_order = np.argsort(np.abs(final_earnings - np.median(final_earnings)))
+    for rank, idx in enumerate(sample_idx[sort_order]):
+        y = trajectories[idx]
+        spl = PchipInterpolator(x, y)
+        y_smooth = np.clip(spl(x_smooth), 0, None)
+        c = cmap(norm(trajectories[idx, -1]))
+        ax.plot(x_smooth, y_smooth, color=c,
+                alpha=0.12 + 0.10 * (rank / N_PATHS),
+                linewidth=0.4 + 0.3 * (rank / N_PATHS), zorder=2)
 
-    # ── Median and mean lines ──────────────────────────────────────────
+    # ── Median and mean (bold, with halo) ─────────────────────────────
     median_line = np.median(trajectories, axis=0)
     mean_line = np.mean(trajectories, axis=0)
-    ax.plot(balloons, median_line, color="white", linewidth=3.5, zorder=4)
-    ax.plot(balloons, median_line, color="#1E40AF", linewidth=2.2,
-            label=f"Median (final = ${median_line[-1]:.2f})", zorder=5)
-    ax.plot(balloons, mean_line, color="white", linewidth=3.5, zorder=4)
-    ax.plot(balloons, mean_line, color="#DC2626", linewidth=2.2,
-            linestyle="--",
-            label=f"Mean (final = ${mean_line[-1]:.2f})", zorder=5)
 
-    # ── Percentile labels at right edge ────────────────────────────────
-    for pct in [5, 25, 75, 95]:
+    spl_med = PchipInterpolator(x, median_line)
+    spl_mean = PchipInterpolator(x, mean_line)
+
+    ax.plot(x_smooth, spl_med(x_smooth), color="#0f172a", linewidth=4, zorder=4)
+    ax.plot(x_smooth, spl_med(x_smooth), color="#38BDF8", linewidth=2.2,
+            label=f"Median = ${median_line[-1]:.2f}", zorder=5)
+    ax.plot(x_smooth, spl_mean(x_smooth), color="#0f172a", linewidth=4, zorder=4)
+    ax.plot(x_smooth, spl_mean(x_smooth), color="#FB923C", linewidth=2.2,
+            linestyle="--", label=f"Mean = ${mean_line[-1]:.2f}", zorder=5)
+
+    # ── Percentile labels (right edge, light text) ────────────────────
+    for pct, anchor in [(5, "top"), (25, "center"), (75, "center"), (95, "bottom")]:
         val = np.percentile(trajectories[:, -1], pct)
-        ax.annotate(f"P{pct}: ${val:.0f}", xy=(n_steps - 1, val),
-                    xytext=(n_steps + 0.3, val), fontsize=8.5,
-                    color="#374151", va="center",
-                    arrowprops=dict(arrowstyle="-", color="#9CA3AF", lw=0.8))
+        ax.text(n_steps - 0.3, val, f" P{pct}", fontsize=8, color="#94A3B8",
+                va=anchor, ha="left", fontweight="bold", zorder=6)
 
-    # ── Color phase markers ────────────────────────────────────────────
-    phase_ends = [0, 10, 20, 30]
-    phase_labels = ["Purple\n(1-10)", "Teal\n(11-20)", "Orange\n(21-30)"]
-    phase_colors = ["#A855F7", "#14B8A6", "#F97316"]
-    for i in range(3):
-        mid = (phase_ends[i] + phase_ends[i + 1]) / 2
-        ax.axvline(phase_ends[i + 1], color=phase_colors[i], alpha=0.35,
-                   linewidth=1.2, linestyle=":", zorder=1)
-        ax.text(mid, -0.06, phase_labels[i], ha="center", va="top",
-                fontsize=8.5, color=phase_colors[i], fontweight="bold",
+    # ── Phase dividers (subtle vertical bands) ────────────────────────
+    phase_cfg = [
+        (0, 10, "#A855F7", "Purple"),
+        (10, 20, "#14B8A6", "Teal"),
+        (20, 30, "#F97316", "Orange"),
+    ]
+    for start, end, color, label in phase_cfg:
+        ax.axvspan(start, end, alpha=0.04, color=color, zorder=0)
+        if end < 30:
+            ax.axvline(end, color=color, alpha=0.3, linewidth=0.8,
+                       linestyle="--", zorder=1)
+        ax.text((start + end) / 2, 1.01, label, ha="center", fontsize=9,
+                color=color, fontweight="bold", alpha=0.8,
                 transform=ax.get_xaxis_transform())
 
+    # ── Colorbar for path earnings ────────────────────────────────────
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, pad=0.02, aspect=30, shrink=0.85)
+    cbar.set_label("Final Session Earnings ($)", fontsize=10, color="#d1d5db")
+    cbar.ax.tick_params(colors="#d1d5db", labelsize=8)
+    cbar.outline.set_edgecolor("#374151")
+
+    # ── Axes and styling ──────────────────────────────────────────────
     ax.set_xlabel("Balloon Number", fontsize=12)
     ax.set_ylabel("Cumulative Earnings ($)", fontsize=12)
     ax.set_title(
-        f"Monte Carlo Earnings Trajectories ({N_PATHS} of {N_SESSIONS:,} sessions)",
-        fontsize=14, fontweight="bold",
+        f"Monte Carlo Earnings Trajectories  ({N_PATHS:,} of {N_SESSIONS:,} sessions)",
+        fontsize=14, fontweight="bold", pad=18,
     )
     ax.set_xlim(0, n_steps - 1)
     ax.set_ylim(bottom=0)
-    ax.legend(fontsize=10, loc="upper left", framealpha=0.9)
-    ax.grid(True, alpha=0.20, linewidth=0.5)
 
-    # Dark background style to match the reference images
-    fig.patch.set_facecolor("#1a1a2e")
-    ax.set_facecolor("#16213e")
-    ax.tick_params(colors="#d1d5db")
-    ax.xaxis.label.set_color("#d1d5db")
-    ax.yaxis.label.set_color("#d1d5db")
-    ax.title.set_color("#f3f4f6")
+    # Dark theme
+    fig.patch.set_facecolor("#0f172a")
+    ax.set_facecolor("#1e293b")
+    ax.tick_params(colors="#94A3B8", labelsize=9)
+    ax.xaxis.label.set_color("#CBD5E1")
+    ax.yaxis.label.set_color("#CBD5E1")
+    ax.title.set_color("#F1F5F9")
     for spine in ax.spines.values():
-        spine.set_color("#374151")
-    ax.grid(True, alpha=0.15, color="#4B5563", linewidth=0.5)
+        spine.set_color("#334155")
+    ax.grid(True, alpha=0.10, color="#475569", linewidth=0.5)
     ax.legend(fontsize=10, loc="upper left", framealpha=0.85,
-              facecolor="#1e293b", edgecolor="#475569", labelcolor="#e5e7eb")
+              facecolor="#1e293b", edgecolor="#475569", labelcolor="#E2E8F0")
 
     fig.tight_layout()
-    fig.savefig(f"{OUTPUT_DIR}/06_mc_trajectories.png", dpi=200,
+    fig.savefig(f"{OUTPUT_DIR}/06_mc_trajectories.png", dpi=250,
                 bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close(fig)
     print(f"Saved {OUTPUT_DIR}/06_mc_trajectories.png")
