@@ -335,12 +335,6 @@ def plot_trajectories(trajectories):
     ax.plot(x_smooth, spl_mean(x_smooth), color="#FB923C", linewidth=2.2,
             linestyle="--", label=f"Mean = ${mean_line[-1]:.2f}", zorder=5)
 
-    # ── Percentile labels (right edge, light text) ────────────────────
-    for pct, anchor in [(5, "top"), (25, "center"), (75, "center"), (95, "bottom")]:
-        val = np.percentile(trajectories[:, -1], pct)
-        ax.text(n_steps - 0.3, val, f" P{pct}", fontsize=8, color="#94A3B8",
-                va=anchor, ha="left", fontweight="bold", zorder=6)
-
     # ── Phase dividers (subtle vertical bands) ────────────────────────
     phase_cfg = [
         (0, 10, "#A855F7", "Purple"),
