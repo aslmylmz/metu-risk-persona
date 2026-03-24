@@ -1462,7 +1462,7 @@ Clustering uses three features: \texttt{dospert\_financial},
 
 Participants with prior task experience ($n = 5$) are excluded from
 clustering because familiarity with the BART paradigm substantially skews
-adaptive strategy and learning metrics. The analysis runs on $N = 10$.
+adaptive strategy and learning metrics. The analysis runs on $N = 11$.
 
 Feature selection was done by exhaustive search across all subsets,
 filtering for combinations that include \texttt{dospert\_financial} (since
@@ -1481,7 +1481,7 @@ singleton clusters.
 \texttt{bart\_impulsivity\_index}     & BART    & Composite timing + explosion + orange signal (Section~\ref{sec:impulsivity}) \\
 \bottomrule
 \end{tabular}
-\caption{Features used in clustering ($N = 10$, prior task excluded). Max pairwise $|r| = 0.449$.}
+\caption{Features used in clustering ($N = 11$, prior task excluded). Max pairwise $|r| = 0.495$.}
 \end{table}
 
 Two behaviorally independent BART dimensions (risk level vs.\@ risk style)
@@ -1535,15 +1535,15 @@ best_k = max(silhouettes, key=silhouettes.get)
 \centering
 \includegraphics[width=\textwidth]{figures/01_k_selection.png}
 \caption{Elbow plot (left) and silhouette scores (right) for $k = 2 \ldots 6$
-on the filtered sample ($N = 10$).}
+on the filtered sample ($N = 11$).}
 \label{fig:k_selection}
 \end{figure}
 
 
-\subsection{Results: $k = 3$, Silhouette $= 0.475$}
+\subsection{Results: $k = 3$, Silhouette $= 0.447$}
 
-After excluding prior-task participants, $k = 3$ gives silhouette $= 0.475$
-with cluster sizes 3/4/3.
+After excluding prior-task participants, $k = 3$ gives silhouette $= 0.447$
+with cluster sizes 4/3/4.
 
 \begin{lstlisting}[style=pythonstyle,caption={Profile computation (Python).}]
 km = KMeans(n_clusters=best_k, n_init=20, random_state=42)
@@ -1559,40 +1559,39 @@ z_centroids = (centroids - df[features].mean()) / df[features].std()
 \toprule
 \textbf{Cluster} & \textbf{Persona} & \texttt{dospert\_fin} & \texttt{rng\_pumps} & \texttt{impulsivity} \\
 \midrule
-C0 & Consistent Conservatives   & z $= -1.10$ & z $= -1.03$ & z $= +0.40$ \\
-C1 & Deliberate Risk-Takers     & z $= +0.38$ & z $= +0.97$ & z $= -1.02$ \\
-C2 & Impulsive Risk-Seekers     & z $= +0.60$ & $\approx 0$ & z $= +0.96$ \\
+C0 & Deliberate Risk-Takers     & z $= +0.35$ & z $= +0.88$ & z $= -1.06$ \\
+C1 & Consistent Conservatives   & z $= -1.20$ & z $= -1.12$ & z $= +0.18$ \\
+C2 & Impulsive Risk-Seekers     & z $= +0.55$ & $\approx 0$ & z $= +0.92$ \\
 \bottomrule
 \end{tabular}
-\caption{Z-scored cluster profiles at $k = 3$ ($N = 10$, silhouette $= 0.475$).}
+\caption{Z-scored cluster profiles at $k = 3$ ($N = 11$, silhouette $= 0.447$).}
 \end{table}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{figures/02_cluster_profiles.png}
-\caption{Z-scored cluster centroids ($N = 10$, prior task excluded).}
+\caption{Z-scored cluster centroids ($N = 11$, prior task excluded).}
 \label{fig:profiles}
 \end{figure}
 
-\textbf{C0: Consistent Conservatives} ($n = 3$). Low self-reported
-financial risk tolerance and low behavioral risk on BART. The mild
-impulsivity uptick suggests that when they do pump, they are not
-particularly strategic about it. Conservative by conviction, not by
-calculation.
+\textbf{C0: Deliberate Risk-Takers} ($n = 4$). Push close to balloon
+limits (high normalized pumps) with the lowest impulsivity of any group:
+slow, consistent timing and controlled explosion rates. Their self-report
+is only moderately above average, suggesting they may not perceive their
+own behavior as particularly risky.
 
-\textbf{C1: Deliberate Risk-Takers} ($n = 4$). Push close to balloon
-limits (high normalized pumps) with low impulsivity: slow, consistent
-timing and controlled explosion rates. Their self-report is only
-moderately above average, suggesting they may not perceive their own
-behavior as particularly risky.
+\textbf{C1: Consistent Conservatives} ($n = 3$). Low self-reported
+financial risk tolerance and low behavioral risk on BART. The near-zero
+impulsivity z-score means their conservative approach is steady rather
+than erratic. Conservative by conviction, not by calculation.
 
-\textbf{C2: Impulsive Risk-Seekers} ($n = 3$). Report the highest
+\textbf{C2: Impulsive Risk-Seekers} ($n = 4$). Report the highest
 financial risk tolerance and act on it impulsively, with fast clicking and
 excess explosions. Their normalized pumps are near zero because they
 blow up before reaching their intended targets. They \emph{intend} to
 take risks but their approach is reactive, not strategic.
 
-The headline: C1 and C2 both report above-average financial risk appetite,
+The headline: C0 and C2 both report above-average financial risk appetite,
 but BART reveals fundamentally different strategies. Self-report alone
 cannot distinguish deliberate from impulsive risk-taking.
 
@@ -1602,16 +1601,18 @@ cannot distinguish deliberate from impulsive risk-taking.
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.85\textwidth]{figures/03_pca_projection.png}
-\caption{PCA projection ($N = 10$). PC1 separates deliberate risk-takers
-(C1) from the rest along the behavioral axis. PC2 is almost entirely
-\texttt{dospert\_financial} (loading $= 0.821$).}
+\caption{PCA projection ($N = 11$). PC1 separates deliberate risk-takers
+(C0) from the rest along the behavioral-plus-self-report axis. PC2 is
+dominated by \texttt{impulsivity\_index} (loading $= 0.862$).}
 \label{fig:pca}
 \end{figure}
 
-PC1 ($\sim$50\%) separates C1 from the rest along the
-\texttt{rng\_normalized\_pumps} vs.\@ \texttt{impulsivity\_index} axis.
-PC2 ($\sim$37\%) is dominated by \texttt{dospert\_financial} (loading $= 0.821$),
-meaning the self-report and behavioral dimensions are close to orthogonal.
+PC1 ($\sim$56\%) loads positively on both \texttt{rng\_normalized\_pumps}
+($0.650$) and \texttt{dospert\_financial} ($0.604$), and negatively on
+\texttt{impulsivity\_index} ($-0.462$), separating C0 (deliberate
+risk-takers) from the rest. PC2 ($\sim$28\%) is dominated by
+\texttt{impulsivity\_index} (loading $= 0.862$), pulling C2 (impulsive
+risk-seekers) upward and C1 (conservatives) downward.
 People who \emph{say} they take financial risks and people who
 \emph{actually} take them on BART are not necessarily the same, which
 is the core convergent validity finding.

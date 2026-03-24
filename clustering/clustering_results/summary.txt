@@ -3,45 +3,44 @@ METU Risk Persona — Clustering Summary
 
 Algorithm: K-Means
 Optimal k: 3 (by silhouette)
-Silhouette: 0.4745
+Silhouette: 0.4468
 
-  k=2: 0.4126
-  k=3: 0.4745 <- best
-  k=4: 0.4999
-  k=5: 0.4950
-  k=6: 0.3661
+  k=2: 0.2721
+  k=3: 0.4468 <- best
+  k=4: 0.4735
+  k=5: 0.4402
+  k=6: 0.3731
 
 Cluster sizes:
-  Cluster 0: n=3 (30.0%)
-  Cluster 1: n=4 (40.0%)
-  Cluster 2: n=3 (30.0%)
+  Cluster 0: n=4 (36.4%)
+  Cluster 1: n=3 (27.3%)
+  Cluster 2: n=4 (36.4%)
 
 Top features per cluster (|z| > 0.3):
 
   Cluster 0:
-    ↓ dospert_financial: z=-1.10
-    ↓ bart_rng_normalized_pumps: z=-1.03
-    ↑ bart_impulsivity_index: z=0.40
+    ↓ bart_impulsivity_index: z=-1.06
+    ↑ bart_rng_normalized_pumps: z=0.88
+    ↑ dospert_financial: z=0.35
 
   Cluster 1:
-    ↓ bart_impulsivity_index: z=-1.02
-    ↑ bart_rng_normalized_pumps: z=0.97
-    ↑ dospert_financial: z=0.38
+    ↓ dospert_financial: z=-1.20
+    ↓ bart_rng_normalized_pumps: z=-1.12
 
   Cluster 2:
-    ↑ bart_impulsivity_index: z=0.96
-    ↑ dospert_financial: z=0.60
+    ↑ bart_impulsivity_index: z=0.92
+    ↑ dospert_financial: z=0.55
 
 PCA loadings:
 
   PC1:
-    + bart_rng_normalized_pumps: 0.627
-    - bart_impulsivity_index: -0.583
-    + dospert_financial: 0.516
+    + bart_rng_normalized_pumps: 0.650
+    + dospert_financial: 0.604
+    - bart_impulsivity_index: -0.462
 
   PC2:
-    + dospert_financial: 0.821
-    + bart_impulsivity_index: 0.546
-    - bart_rng_normalized_pumps: -0.167
+    + bart_impulsivity_index: 0.862
+    + dospert_financial: 0.476
+    + bart_rng_normalized_pumps: 0.171
 
 Nominal distributions:
