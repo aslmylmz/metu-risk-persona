@@ -166,7 +166,8 @@ so the expected value at stopping point $s$ is:
 \end{equation}
 
 We find the optimal stop $s^*$ by evaluating this for every integer $s$ from
-$1$ to $N$ and picking the $s$ that gives the highest EV. The scoring engine
+$1$ to $N$ and picking the $s$ that gives the highest EV (see
+Figure~\ref{fig:ev_curves} for the full curves). The scoring engine
 does exactly this via brute-force enumeration (see \texttt{\_compute\_ev\_optimal}
 in \texttt{bart.py}). A continuous approximation gives $s^* \approx \sqrt{N}$,
 but the actual discrete peaks are slightly below that:
@@ -186,6 +187,228 @@ but the actual discrete peaks are slightly below that:
 steer clear of common psychological associations (e.g.\ red\,$=$\,danger).
 Optimal stops are computed by maximizing equation~\eqref{eq:ev} over integer $s$.}
 \end{table}
+
+The rest of this subsection proves that $s^* = 11, 5, 2$ are indeed optimal by
+developing the marginal-pump condition and then tabulating EV values around
+each peak.
+
+\subsubsection*{Marginal-Pump Condition}
+
+Rather than checking every integer, we can characterize the optimum through a
+ratio test. Dividing the EV at $s+1$ by the EV at $s$:
+
+\begin{equation}
+\frac{\text{EV}(s+1,\,N)}{\text{EV}(s,\,N)}
+  = \frac{(s+1)\;\displaystyle\prod_{k=1}^{s+1}\!\bigl(1 - \tfrac{k}{N}\bigr)}
+         {s\;\displaystyle\prod_{k=1}^{s}\!\bigl(1 - \tfrac{k}{N}\bigr)}
+  = \frac{s+1}{s}\;\Bigl(1 - \frac{s+1}{N}\Bigr)
+\end{equation}
+
+An additional pump is worth taking if and only if this ratio exceeds~1, i.e.
+
+\begin{equation}
+\label{eq:marginal}
+\frac{s+1}{s}\;\Bigl(1 - \frac{s+1}{N}\Bigr) > 1
+\qquad\Longleftrightarrow\qquad
+\text{pump again.}
+\end{equation}
+
+The first factor $(s{+}1)/s$ captures the reward gain from one more pump
+(always $> 1$), while the second factor $1 - (s{+}1)/N$ captures the
+additional survival cost (always $< 1$). The optimal stop $s^*$ is the
+largest $s$ for which the ratio still exceeds~1; at $s^* + 1$ it drops
+below~1, meaning the extra explosion risk outweighs the extra reward.
+
+\subsubsection*{Orange ($N = 8$): Proof That $s^* = 2$}
+
+Applying equation~\eqref{eq:marginal} for the first few pumps:
+
+\begin{center}
+\begin{tabular}{@{}ccccl@{}}
+\toprule
+$s$ & $\dfrac{s+1}{s}$ & $1 - \dfrac{s+1}{N}$ & Ratio & Decision \\[4pt]
+\midrule
+1 & 2.000 & 0.750 & 1.500 & $> 1$ \;\;pump \\[2pt]
+2 & 1.500 & 0.625 & 0.938 & $< 1$ \;\;\textbf{stop} \\[2pt]
+3 & 1.333 & 0.500 & 0.667 & $< 1$ \;\;stop \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The ratio exceeds~1 only at $s = 1$, so a second pump is worthwhile but a
+third is not: $s^* = 2$. The EV values confirm the peak:
+
+\begin{center}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+$s$ & Survival prob.\ $\prod(1 - k/8)$ & $\text{EV}(s, 8)$ \\
+\midrule
+1 & $\tfrac{7}{8} = 0.8750$ & 0.8750 \\[2pt]
+\textbf{2} & $\tfrac{7}{8} \cdot \tfrac{6}{8} = 0.6563$ & \textbf{1.3125} \\[2pt]
+3 & $\tfrac{7}{8} \cdot \tfrac{6}{8} \cdot \tfrac{5}{8} = 0.4102$ & 1.2305 \\[2pt]
+4 & $0.2051$ & 0.8203 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+EV peaks at $s = 2$ with $\text{EV}(2,8) = 1.3125$ and falls off sharply
+for $s \ge 3$. On an 8-pump balloon, the explosion probability ramps up so
+quickly that even one extra pump past the optimum costs roughly $6\%$ of
+expected reward.
+
+\subsubsection*{Teal ($N = 32$): Proof That $s^* = 5$}
+
+\begin{center}
+\begin{tabular}{@{}ccccl@{}}
+\toprule
+$s$ & $\dfrac{s+1}{s}$ & $1 - \dfrac{s+1}{N}$ & Ratio & Decision \\[4pt]
+\midrule
+1 & 2.000 & 0.9375 & 1.875 & $> 1$ \;\;pump \\[2pt]
+2 & 1.500 & 0.9063 & 1.359 & $> 1$ \;\;pump \\[2pt]
+3 & 1.333 & 0.8750 & 1.167 & $> 1$ \;\;pump \\[2pt]
+4 & 1.250 & 0.8438 & 1.055 & $> 1$ \;\;pump \\[2pt]
+5 & 1.200 & 0.8125 & 0.975 & $< 1$ \;\;\textbf{stop} \\[2pt]
+6 & 1.167 & 0.7813 & 0.911 & $< 1$ \;\;stop \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The ratio stays above~1 through $s = 4$ and drops below~1 at $s = 5$,
+giving $s^* = 5$. The full EV profile:
+
+\begin{center}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+$s$ & Survival prob. & $\text{EV}(s, 32)$ \\
+\midrule
+1 & 0.9688 & 0.9688 \\
+2 & 0.9082 & 1.8164 \\
+3 & 0.8231 & 2.4692 \\
+4 & 0.7202 & 2.8807 \\
+\textbf{5} & \textbf{0.6076} & \textbf{3.0382} \\
+6 & 0.4937 & 2.9623 \\
+7 & 0.3857 & 2.7000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The peak at $s = 5$ is only marginally above $s = 4$ (by $0.16$ units),
+reflecting how the marginal ratio at $s = 4$ was already close to~1 ($1.055$).
+After the peak, EV drops by ${\sim}0.08$ per additional pump.
+
+\subsubsection*{Purple ($N = 128$): Proof That $s^* = 11$}
+
+\begin{center}
+\begin{tabular}{@{}ccccl@{}}
+\toprule
+$s$ & $\dfrac{s+1}{s}$ & $1 - \dfrac{s+1}{N}$ & Ratio & Decision \\[4pt]
+\midrule
+7  & 1.143 & 0.9375 & 1.071 & $> 1$ \;\;pump \\[2pt]
+8  & 1.125 & 0.9297 & 1.046 & $> 1$ \;\;pump \\[2pt]
+9  & 1.111 & 0.9219 & 1.024 & $> 1$ \;\;pump \\[2pt]
+10 & 1.100 & 0.9141 & 1.005 & $> 1$ \;\;pump \\[2pt]
+11 & 1.091 & 0.9063 & 0.989 & $< 1$ \;\;\textbf{stop} \\[2pt]
+12 & 1.083 & 0.8984 & 0.973 & $< 1$ \;\;stop \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The transition from $> 1$ to $< 1$ happens between $s = 10$ and $s = 11$:
+$s = 10$ has ratio $1.005$ (barely worth it), $s = 11$ has ratio $0.989$
+(not worth it). Hence $s^* = 11$. Notice how tight the margin is at
+$s = 10$: the reward gain of going from 10 to 11~pumps ($+10\%$) only
+barely outweighs the survival cost ($-8.6\%$).
+
+\begin{center}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+$s$ & Survival prob. & $\text{EV}(s, 128)$ \\
+\midrule
+8  & 0.7500 & 6.0000 \\
+9  & 0.6973 & 6.2753 \\
+10 & 0.6428 & 6.4279 \\
+\textbf{11} & \textbf{0.5875} & \textbf{6.4630} \\
+12 & 0.5325 & 6.3896 \\
+13 & 0.4784 & 6.2190 \\
+14 & 0.4261 & 5.9649 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The EV curve is remarkably flat near the peak: $s = 10$ and $s = 12$
+are both within $0.08$ of the maximum. This means participants who stop
+anywhere between roughly 9 and 13~pumps on purple are playing
+near-optimally, which is reflected in the EV-ratio score
+(\S\ref{sec:ev_ratio}) being forgiving around the peak.
+
+\subsubsection*{Continuous Approximation}
+
+Setting the marginal ratio~\eqref{eq:marginal} equal to~1 and treating
+$s$ as continuous:
+
+\[
+\frac{s+1}{s}\;\Bigl(1 - \frac{s+1}{N}\Bigr) = 1
+\]
+
+For large $N$ with $s \ll N$, we can write $s + 1 \approx s$ in the first
+factor and expand:
+
+\[
+1 \cdot \Bigl(1 - \frac{s}{N}\Bigr) \approx 1
+\quad\Longrightarrow\quad
+s \approx 0
+\]
+
+This crude approximation is uninformative. A better approach: take the
+logarithm of EV$(s,N)$ and differentiate. Writing
+$\ln\text{EV}(s,N) = \ln s + \sum_{k=1}^{s}\ln(1 - k/N)$ and
+approximating the sum by an integral:
+
+\[
+\sum_{k=1}^{s}\ln\!\Bigl(1 - \frac{k}{N}\Bigr)
+\;\approx\;
+\int_0^s \ln\!\Bigl(1 - \frac{x}{N}\Bigr)\,dx
+\;=\;
+-(N - s)\ln\!\Bigl(1 - \frac{s}{N}\Bigr) - s
+\]
+
+For $s \ll N$, using $\ln(1 - s/N) \approx -s/N - s^2/(2N^2)$, the
+dominant balance gives $s^* \approx \sqrt{N}$. Checking:
+$\sqrt{128} = 11.31 \approx 11$,\;
+$\sqrt{32} = 5.66 \approx 5$,\;
+$\sqrt{8} = 2.83 \approx 2$. The approximation is decent but consistently
+overshoots by about half a pump, which is why we use the exact discrete
+enumeration in practice.
+
+\subsubsection*{Expected Session Earnings Under Optimal Play}
+
+Given the optimal stops and the EV at each, we can compute the expected
+earnings for a full 30-balloon session where a player always stops at
+$s^*$ for each color. Each pump on a collected balloon is worth \$0.25,
+so the per-balloon expected dollar reward is $\text{EV}(s^*,N) \times \$0.25$:
+
+\begin{center}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Color} & $N$ & $s^*$ & $\text{EV}(s^*,N)$ & Balloons & Expected earnings \\
+\midrule
+\textcolor{purpleballoon}{Purple} & 128 & 11 & 6.4630 & 10 & $10 \times 6.4630 \times 0.25 = \$16.16$ \\
+\textcolor{tealballoon}{Teal}     & 32  & 5  & 3.0382 & 10 & $10 \times 3.0382 \times 0.25 = \;\$7.60$ \\
+\textcolor{orangeballoon}{Orange} & 8   & 2  & 1.3125 & 10 & $10 \times 1.3125 \times 0.25 = \;\$3.28$ \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Total expected earnings}} & $\mathbf{\$27.03}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Note that this is the \emph{expected} total, not the guaranteed total.
+Even an EV-optimal player will lose some balloons to explosions. For
+instance, stopping at $s^* = 11$ on purple still results in an explosion
+$41.2\%$ of the time ($1 - 0.5875$). Across many sessions the earnings
+average out to \$27.03, but any single session can vary substantially
+(Monte Carlo SD\,$\approx$\,\$4.75; see Section~\ref{sec:money} and
+Figure~\ref{fig:mc_earnings} for the full simulation).
+
 
 \subsection{Session Generation}
 
@@ -393,6 +616,7 @@ Sample session: $20 + 10 = 30$\;\checkmark.
 
 
 \subsection{\texttt{money\_collected} and \texttt{money\_efficiency}}
+\label{sec:money}
 
 Each pump on a collected balloon is worth \$0.25. We compute the total
 money earned and compare it to the theoretical expected earnings under
@@ -422,40 +646,62 @@ With the standard 10/10/10 configuration:
 \end{align*}
 
 To confirm this analytical baseline against the stochastic reality of our
-explosion model, we ran a Monte Carlo simulation (10\,000 sessions of
-30 balloons each, always stopping at $s^*$ per color):
+explosion model, we ran a Monte Carlo simulation (100\,000 sessions of
+30 balloons each, always stopping at $s^*$ per color). The simulation
+script lives at \texttt{scripts/monte\_carlo\_ev.py}.
 
-\begin{lstlisting}[style=pythonstyle,caption={Monte Carlo validation of EV-optimal earnings.}]
-import numpy as np
+Figure~\ref{fig:ev_curves} shows the EV curves for all three colors.
+Each curve rises as the reward from additional pumps accumulates, peaks
+at $s^*$, and then falls off as the growing explosion probability
+dominates. The peak is sharp for orange (where $P(\text{explode})$ ramps
+up fast) and much flatter for purple (where participants have more room
+to deviate without losing much EV).
 
-def simulate_session(n_sessions=10_000):
-    colors = [("purple", 128, 11), ("teal", 32, 5), ("orange", 8, 2)]
-    earnings = []
-    for _ in range(n_sessions):
-        total = 0.0
-        for _, max_pumps, optimal_stop in colors:
-            for _ in range(10):       # 10 balloons per color
-                survived = True
-                for k in range(1, optimal_stop + 1):
-                    if np.random.random() < k / max_pumps:
-                        survived = False
-                        break
-                if survived:
-                    total += optimal_stop * 0.25
-        earnings.append(total)
-    return np.mean(earnings), np.std(earnings)
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figures/04_ev_curves.png}
+\caption{Expected value curves for the three balloon colors.
+The dot marks the EV-optimal stopping point $s^*$ for each color.
+The shaded area under each curve highlights the achievable EV region.}
+\label{fig:ev_curves}
+\end{figure}
 
-mean, sd = simulate_session()
-# mean ~ $27.09, sd ~ $4.68
-\end{lstlisting}
+Figure~\ref{fig:mc_earnings} shows the distribution of session earnings
+under EV-optimal play. The left panel is the overall earnings histogram;
+the right panel breaks earnings down by color.
 
-The simulation yields mean~$=~\$27.09$, SD~$=~\$4.68$, closely matching
-the analytical \$27.03. The small difference is because the analytical
-value assumes the EV is earned on every balloon, while the simulation
-accounts for the fact that some balloons still explode even under optimal
-play. Two participants with identical prescriptive metrics but different
-realized earnings will score differently, which is the point of including
-this component.
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figures/05_mc_earnings.png}
+\caption{Monte Carlo simulation of session earnings under EV-optimal
+play (100\,000 sessions). Left: overall earnings distribution with
+analytical EV (dashed red) and simulated mean (solid green) overlaid,
+$\pm 1$ SD shaded. Right: per-color earnings box plots (diamonds
+mark means).}
+\label{fig:mc_earnings}
+\end{figure}
+
+The simulation yields mean~$= \$27.04$, SD~$= \$4.75$, closely matching
+the analytical \$27.03. A few things worth noting from the results:
+
+\begin{itemize}[nosep]
+    \item The 90\% interval runs from \$19.00 to \$34.75, so two
+          EV-optimal players can easily differ by \$15 on any given session.
+    \item Purple dominates both the mean (\$16.16) and the variance
+          (SD\,$=$\,\$4.29), because each collected purple balloon is worth
+          \$2.75 while each orange balloon is only worth \$0.50.
+    \item Even under optimal play, a purple balloon still explodes
+          $41.2\%$ of the time ($1 - 0.5875$). On average, only
+          ${\sim}5.9$ of the 10 purple balloons survive to collection.
+    \item The distribution is slightly left-skewed: there is a floor
+          effect (you cannot earn less than \$0) but no ceiling on how
+          many balloons happen to survive.
+\end{itemize}
+
+The practical upshot is that two participants with identical strategies
+but different luck can end up with noticeably different earnings. This
+is why we compare realized earnings to the \emph{expected} optimal
+(\texttt{money\_efficiency}) rather than to a fixed dollar target.
 
 
 % ──────────────────────────────────────────────────────────────────────────
