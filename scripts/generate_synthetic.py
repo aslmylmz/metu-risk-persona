@@ -2,12 +2,8 @@
 Generate Synthetic METU Risk Persona Dataset
 =============================================
 
-This script generates a synthetic dataset that mimics the structure of real
-participant data collected in the METU Risk Persona study. The output is
-intended exclusively for demonstration, testing, and development purposes.
-
 **This data does not represent real participants.** All values are drawn from
-parameterised random distributions chosen to approximate realistic ranges
+parameterized random distributions chosen to approximate realistic ranges
 observed in behavioural research, but no actual participant data was used
 to fit these distributions.
 
