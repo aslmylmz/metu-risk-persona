@@ -35,7 +35,6 @@ interface AssessmentResult {
         total_pumps: number;
         total_explosions: number;
         total_collections: number;
-        // New multi-risk metrics
         color_metrics: ColorMetrics[];
         learning_rate: number;
         risk_adjustment_score: number;
@@ -59,9 +58,7 @@ interface AssessmentResult {
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-// ── Config ──────────────────────────────────────────────────────────────────
-
-const TOTAL_BALLOONS = 30; // 10 Red, 10 Yellow, 10 Blue
+const TOTAL_BALLOONS = 30;
 
 interface RiskProfile {
     color: string;
@@ -70,9 +67,9 @@ interface RiskProfile {
 }
 
 const RISK_PROFILES: Record<string, RiskProfile> = {
-    ORANGE: { color: "#F97316", maxPumps: 8, riskLevel: "High" },    // High Risk (Pops early)
-    TEAL: { color: "#14B8A6", maxPumps: 32, riskLevel: "Medium" },   // Standard Risk
-    PURPLE: { color: "#A855F7", maxPumps: 128, riskLevel: "Low" },   // Low Risk (Lasts long)
+    ORANGE: { color: "#F97316", maxPumps: 8, riskLevel: "High" },
+    TEAL: { color: "#14B8A6", maxPumps: 32, riskLevel: "Medium" },
+    PURPLE: { color: "#A855F7", maxPumps: 128, riskLevel: "Low" },
 };
 
 interface BalloonConfig {
@@ -82,18 +79,17 @@ interface BalloonConfig {
 }
 
 /**
- * Generates a shuffled session with 10 of each balloon type.
- * Each balloon has a linear explosion probability: P(pop at pump k) = k / maxPumps
+ * Generates a randomized list of 30 balloons (10 per risk level).
+ * P(explode at pump k) = k / maxPumps.
  */
 function generateSessionConfig(): BalloonConfig[] {
     const configs: BalloonConfig[] = [];
 
-    // Generate 10 of each type
     (["ORANGE", "TEAL", "PURPLE"] as const).forEach((type) => {
         const profile = RISK_PROFILES[type];
         for (let i = 0; i < 10; i++) {
             configs.push({
-                id: 0, // Assigned later
+                id: 0,
                 color: profile.color,
                 maxPumps: profile.maxPumps,
             });
@@ -106,11 +102,10 @@ function generateSessionConfig(): BalloonConfig[] {
         [configs[i], configs[j]] = [configs[j], configs[i]];
     }
 
-    // Assign IDs matches visual order
     return configs.map((c, idx) => ({ ...c, id: idx + 1 }));
 }
 
-// ── Turkish label maps ───────────────────────────────────────────────────────
+// ── Turkish Label Maps ───────────────────────────────────────────────────────
 
 const COLOR_TR: Record<string, string> = {
     purple: "Mor",
@@ -128,20 +123,15 @@ const RISK_TR: Record<string, string> = {
 
 interface BartGameProps {
     candidateId: string;
-    /** Called with backend response after successful submission */
     onComplete?: (data: AssessmentResult) => void;
 }
 
 export default function BartGame({ candidateId, onComplete }: BartGameProps) {
-    // ── Raw event log (useRef — no re-renders) ────────────────────────────────
-    // CRITICAL: Uses performance.now(), NEVER Date.now()
     const eventLogRef = useRef<GameEvent[]>([]);
     const sessionIdRef = useRef(crypto.randomUUID());
-    // Stores the full configuration (color, limit, id) for the session
     const sessionConfigRef = useRef<BalloonConfig[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // ── UI state ──────────────────────────────────────────────────────────────
     const [currentBalloon, setCurrentBalloon] = useState<BalloonState>({
         id: 1,
         pumps: 0,
@@ -160,10 +150,9 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
 
     const balloonCount = completedBalloons.length + 1;
 
-    // ── Record event (performance.now() — NEVER Date.now()) ───────────────────
+    // Record high-resolution monotonic timestamps
     const recordEvent = useCallback(
         (type: GameEvent["type"], extra: Record<string, unknown> = {}) => {
-            // Get current balloon config for color
             const config = sessionConfigRef.current[currentBalloon.id - 1];
 
             if (!config) {
@@ -177,10 +166,8 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                               config?.color === "#14B8A6" ? "teal" :
                               config?.color === "#A855F7" ? "purple" : "teal";
 
-            console.log(`Event ${type} - Balloon ${currentBalloon.id}: color=${colorName}, hexColor=${config?.color}`);
-
             eventLogRef.current.push({
-                timestamp: performance.now(), // Monotonic high-resolution timer
+                timestamp: performance.now(),
                 type,
                 payload: {
                     balloon_id: currentBalloon.id,
@@ -192,12 +179,9 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         [currentBalloon.id]
     );
 
-    // ── Game actions ──────────────────────────────────────────────────────────
-
     const startGame = useCallback(() => {
         eventLogRef.current = [];
         sessionIdRef.current = crypto.randomUUID();
-        // Generate new Multi-Risk session
         sessionConfigRef.current = generateSessionConfig();
 
         setCurrentBalloon({ id: 1, pumps: 0, status: "active" });
@@ -213,12 +197,9 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         const newPumps = currentBalloon.pumps + 1;
         recordEvent("pump");
 
-        // Get config for current balloon (0-indexed)
         const config = sessionConfigRef.current[currentBalloon.id - 1];
         const maxPumps = config ? config.maxPumps : 32;
 
-        // BART probability model: P(pop) = currentPumps / maxPumps (linear increase)
-        // Balloon ALWAYS pops if we reach maxPumps
         const explosionProbability = newPumps / maxPumps;
         const explode = newPumps >= maxPumps || Math.random() < explosionProbability;
 
@@ -295,8 +276,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         }, 1000);
     }, [gamePhase, currentBalloon, recordEvent]);
 
-    // ── Submit to backend ─────────────────────────────────────────────────────
-
     const handleSubmit = useCallback(async () => {
         setIsSubmitting(true);
 
@@ -307,15 +286,14 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
             events: eventLogRef.current,
         };
 
-        // DEBUG: Log submission data
         const colorDist: Record<string, number> = {};
         payload.events.forEach(e => {
             const color = String(e.payload.color || "MISSING");
             colorDist[color] = (colorDist[color] || 0) + 1;
         });
+        
         console.log("Submitting BART assessment:", {
             totalEvents: payload.events.length,
-            sampleEvents: payload.events.slice(0, 5),
             colorDistribution: colorDist
         });
 
@@ -339,7 +317,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
             setResults(data);
             setGamePhase("results");
 
-            // Notify orchestrator if in managed mode
             if (onComplete) {
                 onComplete(data);
             }
@@ -351,9 +328,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }, [candidateId]);
-
-    // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    }, [candidateId, onComplete]);
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
@@ -368,42 +343,26 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         [handlePump, handleCollect]
     );
 
-    // ── Auto-focus for keyboard controls ───────────────────────────────────────
     useEffect(() => {
         if (gamePhase === "playing" && containerRef.current) {
             containerRef.current.focus();
         }
     }, [gamePhase]);
 
-    // ── Debug logging (client-side only) ──────────────────────────────────────
     useEffect(() => {
         if (gamePhase === "playing" && sessionConfigRef.current.length > 0) {
-            // Log balloon sequence generation
             console.log("Generated balloon sequence:", sessionConfigRef.current.map((c) => ({
                 id: c.id,
-                colorHex: c.color,
                 colorName: c.color === "#F97316" ? "ORANGE" : c.color === "#14B8A6" ? "TEAL" : c.color === "#A855F7" ? "PURPLE" : "UNKNOWN",
                 maxPumps: c.maxPumps
             })));
-
-            const colorCounts = sessionConfigRef.current.reduce((acc, c) => {
-                const name = c.color === "#F97316" ? "ORANGE" : c.color === "#14B8A6" ? "TEAL" : c.color === "#A855F7" ? "PURPLE" : "UNKNOWN";
-                acc[name] = (acc[name] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>);
-            console.log("Color distribution:", colorCounts);
         }
     }, [gamePhase]);
 
-    // ── Balloon scale ─────────────────────────────────────────────────────────
-
-    // Dynamic color based on current balloon ID
     const currentConfig = sessionConfigRef.current[currentBalloon.id - 1];
     const balloonColor = currentConfig ? currentConfig.color : "#9CA3AF";
     const balloonScale = 1 + currentBalloon.pumps * 0.08;
     const balloonSize = 100 * balloonScale;
-
-    // ── Render ────────────────────────────────────────────────────────────────
 
     return (
         <div
@@ -476,7 +435,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
             {/* ── Playing / Feedback ───────────────────────────────────────────── */}
             {(gamePhase === "playing" || gamePhase === "feedback") && (
                 <div className="flex flex-col items-center py-8 gap-6">
-                    {/* Status Bar */}
                     <div
                         style={{
                             display: "flex",
@@ -501,7 +459,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </span>
                     </div>
 
-                    {/* Balloon */}
                     <div
                         style={{
                             position: "relative",
@@ -535,7 +492,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                     position: "relative",
                                 }}
                             >
-                                {/* Highlight */}
                                 <div
                                     style={{
                                         position: "absolute",
@@ -548,7 +504,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                                             "radial-gradient(ellipse, rgba(255,255,255,0.4), transparent)",
                                     }}
                                 />
-                                {/* Money amount */}
                                 <span
                                     style={{
                                         fontSize: `${Math.max(1.2, 1.8 * balloonScale * 0.4)}rem`,
@@ -562,7 +517,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                             </div>
                         )}
 
-                        {/* String */}
                         {currentBalloon.status === "active" && (
                             <div
                                 style={{
@@ -576,7 +530,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         )}
                     </div>
 
-                    {/* Feedback */}
                     {feedbackMessage && (
                         <div
                             style={{
@@ -591,7 +544,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </div>
                     )}
 
-                    {/* Action buttons */}
                     <div style={{ display: "flex", gap: "1rem" }}>
                         <button
                             onClick={handlePump}
@@ -653,7 +605,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </button>
                     </div>
 
-                    {/* Mini balloon history */}
                     <div
                         style={{
                             display: "flex",
@@ -709,7 +660,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         / {TOTAL_BALLOONS} balon
                     </p>
 
-                    {/* Balloon history summary */}
                     <div
                         style={{
                             display: "flex",
@@ -779,7 +729,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         Bilişsel Profiliniz
                     </h2>
 
-                    {/* Adaptive Strategy Score - Hero Metric */}
                     {results.raw_metrics.adaptive_strategy_score !== undefined && (
                         <div
                             style={{
@@ -799,7 +748,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </div>
                     )}
 
-                    {/* Color-Based Performance */}
                     {results.raw_metrics.color_metrics && results.raw_metrics.color_metrics.length > 0 && (
                         <div style={{ width: "100%", maxWidth: "480px" }}>
                             <h3
@@ -858,7 +806,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </div>
                     )}
 
-                    {/* Learning & Adaptation Metrics */}
                     <div style={{ width: "100%", maxWidth: "480px" }}>
                         <h3
                             style={{
@@ -945,7 +892,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </div>
                     </div>
 
-                    {/* Behavioral Indices */}
                     <div style={{ width: "100%", maxWidth: "480px" }}>
                         <h3
                             style={{
@@ -1032,7 +978,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </div>
                     </div>
 
-                    {/* Normalized scores */}
                     {results.normalized_scores.length > 0 && (
                         <div style={{ width: "100%", maxWidth: "420px" }}>
                             <h3
@@ -1085,7 +1030,6 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                         </div>
                     )}
 
-                    {/* Play again */}
                     <button
                         onClick={startGame}
                         style={{
