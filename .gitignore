@@ -23,6 +23,20 @@ data/participants/
 # ── Script output ─────────────────────────────────────────────────────────
 output/
 
+# ── Documentation build ───────────────────────────────────────────────────
+docs/_build/
+
+# ── LaTeX build artifacts (paper/) ────────────────────────────────────────
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
 # ── OS ────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

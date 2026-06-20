@@ -528,11 +528,11 @@ def _calculate_risk_adjustment_score(
     """
     Score alignment with true sequential Bernoulli model EV-optimal points.
 
-    Optimals: Purple=12, Teal=6, Orange=2.
+    Optimals: Purple=11, Teal=5, Orange=2.
     Scores scale linearly from 100 at optimal to 0 at limits (0 or max_pumps).
     """
     cp = color_pumps
-    optimal_stops = {"purple": 12.0, "teal": 6.0, "orange": 2.0}
+    optimal_stops = {"purple": 11.0, "teal": 5.0, "orange": 2.0}
     max_pumps_caps = {"purple": 128, "teal": 32, "orange": 8}
     scores = []
 

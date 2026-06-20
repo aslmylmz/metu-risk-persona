@@ -1,0 +1,12 @@
+# Documentation build dependencies (used by Read the Docs and local builds).
+#
+# The heavy scientific dependencies (numpy, scipy, pandas, matplotlib) are
+# mocked during the autodoc import step (see ``autodoc_mock_imports`` in
+# conf.py), so only pydantic is needed for the API reference to introspect
+# the schema models.
+
+sphinx>=7.2
+furo>=2024.1.29
+myst-parser>=2.0
+sphinx-copybutton>=0.5
+pydantic>=2.6
