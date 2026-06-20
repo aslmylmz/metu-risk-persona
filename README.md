@@ -73,7 +73,7 @@ The optimal stopping point s* maximizes this expression. A continuous approximat
 ```
 metu-risk-persona/
 ├── scoring/
-│   ├── bart.py                     Scoring engine (1,300+ lines, 30+ metrics)
+│   ├── bart.py                     Scoring engine
 │   └── schemas/
 │       ├── __init__.py             Pydantic data models (GameEvent, BARTMetrics, etc.)
 │       └── game_events.py          BART event validators
