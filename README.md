@@ -1,3 +1,4 @@
+[![Documentation Status](https://readthedocs.org/projects/metu-risk-persona/badge/?version=latest)](https://metu-risk-persona.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20592164.svg)](https://doi.org/10.5281/zenodo.20592164)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 # Dynamic Hazard Rate BART
