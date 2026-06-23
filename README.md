@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 # Dynamic Hazard Rate BART
 
-**A Multi-Risk Balloon Analogue Risk Task with Sequential Bernoulli Explosion Model**
+**A Multi-Risk Balloon Analogue Risk Task**
 
-An open-source implementation of a modified BART (Balloon Analogue Risk Task) that replaces the classic uniform explosion threshold with a **dynamic hazard rate** — at each pump *k*, the balloon explodes with probability *k / N* (sequential Bernoulli trials with linearly increasing hazard). This creates a fundamentally different risk structure where the optimal stopping point is approximately √N rather than N/2.
+An open-source implementation of a modified BART (Balloon Analogue Risk Task) that replaces the classic uniform explosion threshold with a **dynamic hazard rate** — at each pump *k*, the balloon explodes with probability *k / N* (sequential trials with linearly increasing hazard). This creates a fundamentally different risk structure where the optimal stopping point is approximately √N rather than N/2.
 
 The repository includes a complete **React game client**, a **Python scoring engine** with 40+ psychometric metrics, and tools for **Monte Carlo verification** of the theoretical EV-optimal stops.
 
@@ -41,7 +41,7 @@ The classic BART uses a uniform explosion point drawn from [1, N] — giving a c
 P(explode at pump k) = k / N
 ```
 
-This sequential Bernoulli model has key advantages for research:
+This sequential model has key advantages for research:
 
 1. **Increasing hazard** — risk grows with each pump, matching real-world risk accumulation
 2. **Non-trivial optimal stopping** — the EV-optimal stop is lower than N/2 and varies non-linearly with N
@@ -158,7 +158,7 @@ The engine validates sessions before scoring:
 `games/bart/BartGame.tsx` is a complete React/Next.js component implementing the three-color BART with:
 - Animated balloon inflation with color-coded risk tiers
 - Real-time pump counter and reward display
-- Sequential Bernoulli explosion model (P = k/N)
+- Sequential explosion model (P = k/N)
 - Event logging with `performance.now()` timestamps
 - Collect/explode animations and session summary
 
@@ -245,8 +245,7 @@ If you use this implementation in your research, please cite:
 ```bibtex
 @software{yilmaz2026bart,
   author    = {Y{\i}lmaz, Ahmet Selim},
-  title     = {Dynamic Hazard Rate BART: A Multi-Risk Balloon Analogue Risk Task
-               with Sequential Bernoulli Explosion Model},
+  title     = {Dynamic Hazard Rate BART: A Multi-Risk Balloon Analogue Risk Task},
   year      = {2026},
   url       = {https://github.com/aslmylmz/metu-risk-persona},
   note      = {Open-source software, MIT License}
