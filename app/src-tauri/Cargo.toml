@@ -1,0 +1,21 @@
+[package]
+name = "bart-instrument"
+version = "0.1.2"
+description = "Offline desktop shell for the Dynamic Hazard Rate BART"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# The lib holds the app logic; main.rs is a thin entrypoint (mobile shares the lib).
+name = "bart_instrument_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+# Minimal offline plugins: native file dialogs + scoped local file access for
+# study.json (SPEC §10). The sidecar lifecycle (issue 11) spawns via std::process.
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
