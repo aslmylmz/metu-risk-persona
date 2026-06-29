@@ -1,14 +1,11 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// ── Types ───────────────────────────────────────────────────────────────────
+import { submitSession } from "./lib/api";
+import { colorNameFromHex } from "./lib/colors";
+import type { GameEvent } from "./lib/events";
+import { buildSessionPayload } from "./lib/session";
 
-interface GameEvent {
-    timestamp: number;
-    type: "pump" | "collect" | "explode";
-    payload: Record<string, unknown>;
-}
+// ── Types ───────────────────────────────────────────────────────────────────
 
 interface BalloonState {
     id: number;
@@ -162,9 +159,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
                 });
             }
 
-            const colorName = config?.color === "#F97316" ? "orange" :
-                              config?.color === "#14B8A6" ? "teal" :
-                              config?.color === "#A855F7" ? "purple" : "teal";
+            const colorName = colorNameFromHex(config?.color ?? "");
 
             eventLogRef.current.push({
                 timestamp: performance.now(),
@@ -279,12 +274,11 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
     const handleSubmit = useCallback(async () => {
         setIsSubmitting(true);
 
-        const payload = {
-            session_id: sessionIdRef.current,
-            game_type: "BART_RISK",
-            candidate_id: candidateId,
-            events: eventLogRef.current,
-        };
+        const payload = buildSessionPayload(
+            sessionIdRef.current,
+            candidateId,
+            eventLogRef.current,
+        );
 
         const colorDist: Record<string, number> = {};
         payload.events.forEach(e => {
@@ -298,22 +292,7 @@ export default function BartGame({ candidateId, onComplete }: BartGameProps) {
         });
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            const response = await fetch(
-                `${apiUrl}/assessments/bart`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                }
-            );
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || "Scoring failed");
-            }
-
-            const data: AssessmentResult = await response.json();
+            const data = await submitSession<AssessmentResult>(payload);
             setResults(data);
             setGamePhase("results");
 
