@@ -1,0 +1,53 @@
+name: Sidecar (Windows freeze)
+
+# De-risk gate for Phase 1 (SPEC §9/§12/§18): prove the scipy-free scoring
+# engine freezes with PyInstaller and runs on Windows before building the UI.
+# Windows artifacts can only be produced on Windows (no cross-compile), so this
+# runs on a windows-latest runner and is the open progress record for the freeze.
+
+on:
+  push:
+    branches: [feat/standalone-instrument]
+    paths:
+      - "app/sidecar/**"
+      - "scoring/**"
+      - "pyproject.toml"
+      - ".github/workflows/sidecar-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  freeze-and-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install (engine + sidecar + build + dev)
+        run: python -m pip install -e ".[sidecar,build,dev]"
+
+      - name: Run tests on Windows
+        # Confirms the scipy-free engine and the sidecar are cross-platform.
+        run: python -m pytest -q
+
+      - name: Freeze hello-score with PyInstaller
+        run: >
+          python -m PyInstaller app/sidecar/hello-score.spec
+          --distpath dist --workpath build --noconfirm
+
+      - name: Run the frozen hello-score.exe
+        shell: pwsh
+        run: |
+          $out = & ".\dist\hello-score.exe"
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) { throw "hello-score.exe exited $LASTEXITCODE" }
+          if ($out -notmatch "HELLO_SCORE_OK") { throw "missing HELLO_SCORE_OK marker" }
+          if ($out -notmatch "optimum=11") { throw "missing optimum=11" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hello-score-windows
+          path: dist/hello-score.exe
+          if-no-files-found: error

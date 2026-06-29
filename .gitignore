@@ -12,6 +12,10 @@ node_modules/
 .next/
 dist/
 
+# ── PyInstaller (frozen sidecar build artifacts) ──────────────────────────
+build/
+*.manifest
+
 # ── Data (real participant data is NEVER committed) ───────────────────────
 data/raw/
 data/participants/
