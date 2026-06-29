@@ -1,0 +1,198 @@
+"""Behavior of the TaskConfig + hazard-family library (scoring.config).
+
+Tests exercise the public interface: hazard families produce hazard vectors,
+configs expose EV curves with numeric optima, and the default linear study
+reproduces the established 128/32/8 -> 11/5/2 result.
+"""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from scoring.bart import _compute_ev_optimal
+from scoring.config import (
+    DEFAULT_TASK_CONFIG,
+    ColorProfile,
+    ConstantHazard,
+    ExponentialHazard,
+    GompertzHazard,
+    LinearHazard,
+    LogisticHazard,
+    LognormalHazard,
+    RayleighHazard,
+    StepHazard,
+    TabularHazard,
+    TaskConfig,
+    UniformHazard,
+    WeibullHazard,
+    balloon_curve,
+)
+
+
+def _is_increasing(xs):
+    return all(b >= a for a, b in zip(xs, xs[1:]))
+
+
+def test_linear_hazard_vector_is_k_over_n():
+    """Linear family: h(k) = k / N over k = 1..N, reaching 1 at the cap."""
+    h = LinearHazard().hazard_vector(8)
+    assert h == pytest.approx([k / 8 for k in range(1, 9)])
+    assert h[-1] == pytest.approx(1.0)
+
+
+def test_linear_optimum_matches_established_engine():
+    """The numeric optimum of the linear curve reproduces the validated result:
+    N=128 -> s*=11, peak EV ~= 6.46 (same as scoring.bart._compute_ev_optimal)."""
+    curve = balloon_curve(LinearHazard().hazard_vector(128), reward_per_pump=1.0)
+    assert curve.optimum == 11
+    assert curve.optimal_ev == pytest.approx(6.46, abs=0.01)
+
+
+def test_color_profile_curve_uses_its_cap():
+    """A ColorProfile builds its curve from its own max_pumps cap (teal N=32 -> 5)."""
+    teal = ColorProfile(
+        name="teal",
+        label="Teal",
+        display_hex="#14b8a6",
+        max_pumps=32,
+        trials=10,
+        hazard=LinearHazard(),
+    )
+    assert teal.curve(reward_per_pump=1.0).optimum == 5
+
+
+def test_default_config_reproduces_established_optima():
+    """The shipped default linear study yields the validated optima 11/5/2."""
+    assert DEFAULT_TASK_CONFIG.optima == {"purple": 11, "teal": 5, "orange": 2}
+
+
+@pytest.mark.parametrize("n", [128, 32, 8, 16, 50, 100])
+def test_linear_curve_agrees_with_existing_engine(n):
+    """The config's linear curve matches scoring.bart for both s* and peak EV."""
+    s_engine, ev_engine = _compute_ev_optimal(n)
+    curve = balloon_curve(LinearHazard().hazard_vector(n), reward_per_pump=1.0)
+    assert curve.optimum == s_engine
+    assert curve.optimal_ev == pytest.approx(ev_engine)
+
+
+def test_optimum_is_invariant_to_reward():
+    """reward_per_pump scales EV uniformly, so it must not move the optimum."""
+    h = LinearHazard().hazard_vector(64)
+    cheap = balloon_curve(h, reward_per_pump=0.25)
+    rich = balloon_curve(h, reward_per_pump=4.0)
+    assert cheap.optimum == rich.optimum
+    assert rich.optimal_ev == pytest.approx(cheap.optimal_ev * (4.0 / 0.25))
+
+
+def test_constant_hazard_optimum_is_inverse_p():
+    """Constant family: flat hazard p, geometric burst-time, optimum ~ 1/p."""
+    curve = balloon_curve(ConstantHazard(p=0.1).hazard_vector(60), reward_per_pump=1.0)
+    assert all(h == pytest.approx(0.1) for h in curve.hazard)
+    assert curve.optimum == pytest.approx(10, abs=1)
+
+
+def test_uniform_lejuez_optimum_is_half_n():
+    """Classic Lejuez uniform burst: survival (N-s)/N, EV-optimum at N/2."""
+    curve = balloon_curve(UniformHazard().hazard_vector(64), reward_per_pump=1.0)
+    assert curve.optimum == 32
+    assert curve.hazard[-1] == pytest.approx(1.0)
+
+
+def test_rayleigh_optimum_is_sigma():
+    """h(k)=k/sigma^2; optimum ~ sigma, decoupled from the (larger) pump cap."""
+    curve = balloon_curve(RayleighHazard(sigma=10).hazard_vector(50), reward_per_pump=1.0)
+    assert curve.optimum == pytest.approx(10, abs=1)
+
+
+def test_exponential_optimum_is_inverse_rate():
+    """Flat hazard 1-e^(-rate); geometric burst-time, optimum ~ 1/rate."""
+    curve = balloon_curve(ExponentialHazard(rate=0.1).hazard_vector(60), reward_per_pump=1.0)
+    assert curve.optimum == pytest.approx(10, abs=1)
+
+
+# ── Shape families (no clean closed-form optimum: structural assertions) ──────
+
+
+def test_weibull_shape_two_is_rising_with_interior_optimum():
+    h = WeibullHazard(shape=2).hazard_vector(128)
+    assert all(0.0 <= x <= 1.0 for x in h)
+    assert _is_increasing(h)
+    curve = balloon_curve(h, reward_per_pump=1.0)
+    assert 64 < curve.optimum < 128  # ~ N/sqrt(2)
+
+
+def test_gompertz_hazard_accelerates():
+    h = GompertzHazard(a=0.001, b=0.05).hazard_vector(128)
+    assert all(0.0 <= x <= 1.0 for x in h)
+    assert _is_increasing(h)
+    assert h[-1] > h[0]
+
+
+def test_logistic_hazard_is_a_bounded_s_curve():
+    spec = LogisticHazard(h_max=0.9, midpoint=20, steepness=0.3)
+    h = spec.hazard_vector(40)
+    assert all(0.0 <= x <= 0.9 + 1e-9 for x in h)
+    assert _is_increasing(h)
+    assert h[0] < 0.1 < h[-1]
+
+
+def test_lognormal_hazard_is_non_monotone():
+    h = LognormalHazard(mu=3.0, sigma=0.5).hazard_vector(60)
+    assert all(0.0 <= x <= 1.0 for x in h)
+    rises = any(b > a for a, b in zip(h, h[1:]))
+    falls = any(b < a for a, b in zip(h, h[1:]))
+    assert rises and falls  # the defining feature: rise then fall
+
+
+def test_step_hazard_takes_segment_levels():
+    h = StepHazard(breakpoints=[10, 20], levels=[0.05, 0.2, 0.6]).hazard_vector(30)
+    assert h[4] == pytest.approx(0.05)   # pump 5  -> segment 0
+    assert h[14] == pytest.approx(0.2)   # pump 15 -> segment 1
+    assert h[24] == pytest.approx(0.6)   # pump 25 -> segment 2
+
+
+def test_tabular_hazard_returns_its_array():
+    h = TabularHazard(values=[0.1, 0.3, 0.7, 1.0]).hazard_vector(4)
+    assert h == pytest.approx([0.1, 0.3, 0.7, 1.0])
+
+
+# ── Validation ───────────────────────────────────────────────────────────────
+
+
+def test_constant_p_must_be_a_probability():
+    with pytest.raises(ValidationError):
+        ConstantHazard(p=1.5)
+
+
+def test_tabular_values_must_be_in_unit_interval():
+    with pytest.raises(ValidationError):
+        TabularHazard(values=[0.5, 1.2])
+
+
+def test_tabular_length_must_match_cap():
+    spec = TabularHazard(values=[0.1, 0.3, 0.7, 1.0])
+    with pytest.raises(ValueError):
+        spec.hazard_vector(5)
+
+
+def test_balloon_curve_rejects_non_finite_hazard():
+    """A corrupt (NaN/inf) hazard must fail loudly, not skew the optimum silently."""
+    with pytest.raises(ValueError):
+        balloon_curve([0.1, float("nan"), 0.3], reward_per_pump=1.0)
+
+
+def test_hazard_spec_is_selected_by_family_tag():
+    """A study file names a family; the discriminated union picks the model."""
+    cp = ColorProfile.model_validate(
+        {
+            "name": "x",
+            "label": "X",
+            "display_hex": "#ffffff",
+            "max_pumps": 64,
+            "trials": 5,
+            "hazard": {"family": "uniform"},
+        }
+    )
+    assert isinstance(cp.hazard, UniformHazard)
+    assert cp.curve(reward_per_pump=1.0).optimum == 32
