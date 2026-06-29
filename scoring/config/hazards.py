@@ -120,13 +120,18 @@ class LognormalHazard(BaseModel):
     sigma: float = Field(gt=0.0, description="log-scale shape")
 
     def hazard_vector(self, n: int) -> list[float]:
-        from scipy import stats  # local import: only paid when this family is used
-
-        dist = stats.lognorm(s=self.sigma, scale=math.exp(self.mu))
+        # Hazard h(k) = pdf(k) / sf(k) for a log-normal burst time, computed with
+        # the stdlib (no scipy): for a log-normal with parameters (mu, sigma),
+        #   sf(k)  = 1/2 * erfc((ln k - mu) / (sigma * sqrt(2)))
+        #   pdf(k) = exp(-1/2 * z^2) / (k * sigma * sqrt(2*pi)),  z = (ln k - mu)/sigma
+        sqrt2 = math.sqrt(2.0)
+        pdf_norm = 1.0 / (self.sigma * math.sqrt(2.0 * math.pi))
         out: list[float] = []
         for k in range(1, n + 1):
-            sf = float(dist.sf(k))
-            out.append(1.0 if sf <= 1e-12 else _clamp(float(dist.pdf(k)) / sf))
+            z = (math.log(k) - self.mu) / self.sigma
+            sf = 0.5 * math.erfc(z / sqrt2)
+            pdf = pdf_norm * math.exp(-0.5 * z * z) / k
+            out.append(1.0 if sf <= 1e-12 else _clamp(pdf / sf))
         return out
 
 

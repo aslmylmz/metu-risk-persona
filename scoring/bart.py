@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections import defaultdict
 from typing import Any
 
 import numpy as np
-from scipy import stats
 
 from scoring.config import DEFAULT_TASK_CONFIG, BalloonCurve, TaskConfig
 from scoring.schemas.game_events import BARTMetrics, ColorMetrics, GameEvent
@@ -238,10 +238,18 @@ def _calculate_learning_rate(
         pump_counts = np.array([t[1] for t in trials])
 
         if len(trial_nums) >= 2 and np.std(trial_nums) > 0:
-            slope, _intercept, r_value, _p_value, _std_err = stats.linregress(
-                trial_nums,
-                pump_counts,
-            )
+            # OLS slope and Pearson r without scipy (caller guarantees Sxx > 0).
+            x = trial_nums.astype(float)
+            y = pump_counts.astype(float)
+            dx = x - x.mean()
+            dy = y - y.mean()
+            sxx = float(np.dot(dx, dx))
+            syy = float(np.dot(dy, dy))
+            sxy = float(np.dot(dx, dy))
+            slope = sxy / sxx
+            # Match scipy.stats.linregress: r = 0 when the y-variance is 0,
+            # otherwise the correlation clamped to [-1, 1].
+            r_value = 0.0 if syy == 0.0 else max(-1.0, min(1.0, sxy / math.sqrt(sxx * syy)))
             weighted_slope = slope * (r_value**2)
 
             # Adjust sign based on adaptive behavior per risk profile
@@ -513,7 +521,8 @@ def _calculate_risk_sensitivity(
     if np.std(user_pumps) == 0 or np.std(risk_capacities) == 0:
         return 0.0
 
-    r, _p = stats.pearsonr(risk_capacities, user_pumps)
+    # Pearson r without scipy; nonzero std (guarded above) keeps it finite.
+    r = float(np.corrcoef(risk_capacities, user_pumps)[0, 1])
 
     if np.isnan(r):
         return 0.0

@@ -29,13 +29,14 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.26",
-    "scipy>=1.12",
     "pydantic>=2.6",
 ]
 
 [project.optional-dependencies]
 # Used by scripts/ (Monte Carlo verification, synthetic data generation).
-scripts = ["matplotlib>=3.8", "pandas>=2.2"]
+# scipy lives here, not in core: the engine is scipy-free so the frozen sidecar
+# (SPEC §3, §18) stays small; only scripts/monte_carlo_ev.py needs it.
+scripts = ["matplotlib>=3.8", "pandas>=2.2", "scipy>=1.12"]
 # Test/dev tooling.
 dev = ["pytest>=7"]
 

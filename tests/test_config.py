@@ -145,6 +145,27 @@ def test_lognormal_hazard_is_non_monotone():
     assert rises and falls  # the defining feature: rise then fall
 
 
+def test_lognormal_hazard_matches_scipy_reference():
+    """The (scipy-free) lognormal hazard matches scipy.stats.lognorm to fp.
+
+    Guards the math.erfc reimplementation against the original source of truth.
+    Runs only where scipy is installed; the engine itself never imports it.
+    """
+    import math
+
+    stats = pytest.importorskip("scipy.stats")
+    mu, sigma, n = 3.0, 0.5, 60
+    dist = stats.lognorm(s=sigma, scale=math.exp(mu))
+    expected = []
+    for k in range(1, n + 1):
+        sf = float(dist.sf(k))
+        ratio = float(dist.pdf(k)) / sf if sf > 1e-12 else None
+        expected.append(1.0 if ratio is None else min(max(ratio, 0.0), 1.0))
+
+    got = LognormalHazard(mu=mu, sigma=sigma).hazard_vector(n)
+    assert got == pytest.approx(expected, rel=1e-9, abs=1e-12)
+
+
 def test_step_hazard_takes_segment_levels():
     h = StepHazard(breakpoints=[10, 20], levels=[0.05, 0.2, 0.6]).hazard_vector(30)
     assert h[4] == pytest.approx(0.05)   # pump 5  -> segment 0
