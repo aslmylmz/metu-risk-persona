@@ -13,8 +13,8 @@ authors:
     family-names: "Yılmaz"
     orcid: "https://orcid.org/0009-0000-2866-5774"
     affiliation: "Middle East Technical University"
-version: "0.1.2"
-date-released: "2026-06-20"
+version: "0.2.0"
+date-released: "2026-07-01"
 license: MIT
 repository-code: "https://github.com/aslmylmz/metu-risk-persona"
 url: "https://bart.aselimyilmaz.com"
