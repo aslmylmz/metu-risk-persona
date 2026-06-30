@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Body, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from scoring import __version__
@@ -35,6 +36,18 @@ def _slug(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-") or "study"
 
 app = FastAPI(title="BART scoring sidecar", version=__version__)
+
+# The sidecar is strictly loopback (bound to 127.0.0.1, not network-accessible),
+# so permissive CORS is safe.  This lets the Vite dev server, Tauri's Windows
+# WebView2, and any plain browser reach the sidecar without "Failed to fetch"
+# errors from cross-origin preflight rejections (issue 22).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 @app.get("/healthz")

@@ -147,3 +147,12 @@ SmartScreen docs, embedded WebView2 offline bootstrapper, tag-triggered
 > Out of scope for Phase 4 (later phases): code signing (documented as future
 > enhancement), macOS distribution/notarization, auto-update, and the JOSS rewrite
 > (Phase 5).
+
+## Bugfixes
+
+Cross-cutting fixes discovered during end-to-end testing.
+
+| # | Issue | Depends on | Touches |
+|---|---|---|---|
+| [22](22-sidecar-cors-localhost-fix.md) | Sidecar CORS middleware + `localhost` → `127.0.0.1` fix | 08, 15, 16 | `app/sidecar/app.py`, `app/src/lib/api.ts`, `tests/` |
+| [23](23-runflow-error-retry.md) | RunFlow error recovery: retry instead of re-enter ID | 16, 22 | `app/src/run/RunFlow.tsx`, `app/src/lib/i18n.ts` |

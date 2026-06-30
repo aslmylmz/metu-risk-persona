@@ -380,3 +380,31 @@ def test_write_output_persists_session_files(tmp_path):
     # Config snapshot is the self-documenting study record.
     snapshot = json.loads(Path(paths["config"]).read_text(encoding="utf-8"))
     assert snapshot["title"] == DEFAULT_TASK_CONFIG.title
+
+
+def test_cors_preflight_returns_allow_origin():
+    """An OPTIONS preflight to any endpoint returns Access-Control-Allow-Origin,
+    so cross-origin fetches from the webview / dev browser succeed (issue 22)."""
+    resp = client.options(
+        "/preview",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert "access-control-allow-origin" in resp.headers
+
+
+def test_cors_header_on_post_response():
+    """A regular POST from a cross-origin browser carries the allow-origin header
+    on the response, so the browser hands the body to fetch() (issue 22)."""
+    resp = client.post(
+        "/preview",
+        json=DEFAULT_TASK_CONFIG.model_dump(),
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert resp.status_code == 200
+    assert "access-control-allow-origin" in resp.headers
+
+

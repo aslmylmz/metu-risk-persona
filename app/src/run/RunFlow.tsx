@@ -92,8 +92,8 @@ export function RunFlow({ config, onExit }: RunFlowProps) {
       {phase === "error" && (
         <>
           <p style={{ color: "#b91c1c" }}>{error}</p>
-          <button type="button" onClick={() => setPhase("id")}>
-            {t.idContinue}
+          <button type="button" onClick={() => setPhase("loading")}>
+            {t.retry}
           </button>
         </>
       )}

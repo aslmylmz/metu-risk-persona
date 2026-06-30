@@ -29,13 +29,13 @@ describe("setApiBaseUrl", () => {
   it("clearing the override restores the default", () => {
     setApiBaseUrl("http://127.0.0.1:5000");
     setApiBaseUrl(null);
-    expect(resolveApiUrl()).toBe("http://localhost:8000");
+    expect(resolveApiUrl()).toBe("http://127.0.0.1:8000");
   });
 });
 
 describe("resolveApiUrl", () => {
-  it("defaults to the local sidecar when VITE_API_URL is unset", () => {
-    expect(resolveApiUrl()).toBe("http://localhost:8000");
+  it("defaults to the IPv4 loopback sidecar when VITE_API_URL is unset", () => {
+    expect(resolveApiUrl()).toBe("http://127.0.0.1:8000");
   });
 
   it("honors VITE_API_URL when provided", () => {
@@ -46,14 +46,14 @@ describe("resolveApiUrl", () => {
 
 describe("scoringEndpoint", () => {
   it("targets the sidecar /score route on the resolved base URL", () => {
-    expect(scoringEndpoint()).toBe("http://localhost:8000/score");
+    expect(scoringEndpoint()).toBe("http://127.0.0.1:8000/score");
   });
 });
 
 describe("initSidecarUrl", () => {
   it("is a no-op outside Tauri, leaving the resolved URL at its default", async () => {
     await initSidecarUrl();
-    expect(resolveApiUrl()).toBe("http://localhost:8000");
+    expect(resolveApiUrl()).toBe("http://127.0.0.1:8000");
   });
 });
 
@@ -71,7 +71,7 @@ describe("persistSession", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("http://localhost:8000/write-output");
+    expect(url).toBe("http://127.0.0.1:8000/write-output");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({
       session: { session_id: "s", game_type: "BART_RISK", candidate_id: "c", events: [] },
@@ -91,7 +91,7 @@ describe("validateConfig", () => {
 
     expect(result).toEqual({ ok: false, errors: ["colors.0.max_pumps: must be > 0"] });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("http://localhost:8000/validate-config");
+    expect(url).toBe("http://127.0.0.1:8000/validate-config");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual(DEFAULT_STUDY);
   });
@@ -109,7 +109,7 @@ describe("preview", () => {
 
     expect(result).toEqual({ curves });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("http://localhost:8000/preview");
+    expect(url).toBe("http://127.0.0.1:8000/preview");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual(DEFAULT_STUDY);
   });
@@ -134,7 +134,7 @@ describe("submitSession", () => {
 
     expect(result).toEqual({ session_id: "s", raw_metrics: {} });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("http://localhost:8000/score");
+    expect(url).toBe("http://127.0.0.1:8000/score");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({ session: payload });
   });

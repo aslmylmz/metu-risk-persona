@@ -23,7 +23,7 @@ export interface PreviewResponse {
 }
 
 /** Default scoring endpoint: the local Python sidecar (overridable via VITE_API_URL). */
-const DEFAULT_API_URL = "http://localhost:8000";
+const DEFAULT_API_URL = "http://127.0.0.1:8000";
 
 /** Runtime override for the sidecar base URL: the Tauri shell injects its ephemeral port. */
 let overrideApiUrl: string | null = null;

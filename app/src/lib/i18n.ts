@@ -37,6 +37,8 @@ export interface TaskStrings {
   seeResults: string;
   // Debrief
   debriefTitle: string;
+  // Error recovery
+  retry: string;
 }
 
 export const STRINGS: Record<Language, TaskStrings> = {
@@ -65,6 +67,7 @@ export const STRINGS: Record<Language, TaskStrings> = {
     analyzing: "Analyzing…",
     seeResults: "See my results",
     debriefTitle: "Your results",
+    retry: "Retry",
   },
   tr: {
     consentTitle: "Başlamadan önce",
@@ -91,6 +94,7 @@ export const STRINGS: Record<Language, TaskStrings> = {
     analyzing: "Analiz ediliyor…",
     seeResults: "Sonuçlarımı Gör",
     debriefTitle: "Sonuçlarınız",
+    retry: "Tekrar Dene",
   },
 };
 
