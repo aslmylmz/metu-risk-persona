@@ -108,3 +108,42 @@ the task, and the existing results screen reused as the debrief.
 
 > Out of scope for Phase 3 (later phases): the Windows CI `tauri build` + installer +
 > signing (Phase 4) and the JOSS rewrite (Phase 5).
+
+## Phase 4 — Distribution
+
+The Windows release pipeline: freeze the full sidecar on Windows CI, build a Tauri
+NSIS per-user installer (no admin rights), smoke-test it, and document the
+unsigned-app experience + a researcher quickstart. Sequenced **de-risk-first**: prove
+the full sidecar freezes on Windows (17) before wiring the Tauri bundle (18) and
+installer verification (19). Documentation (20, 21) runs in parallel once the
+installer exists. Decisions locked at kickoff: NSIS per-user install, unsigned with
+SmartScreen docs, embedded WebView2 offline bootstrapper, tag-triggered
+`windows-release.yml` workflow, quickstart in Sphinx/MyST for Read the Docs.
+
+| # | Issue | Depends on | Touches |
+|---|---|---|---|
+| [17](17-windows-ci-sidecar.md) | Windows CI: full sidecar freeze + smoke test | Phase 3 | `.github/workflows/sidecar-windows.yml` |
+| [18](18-tauri-windows-bundle.md) | Tauri Windows bundle + NSIS per-user installer | 17 | `.github/workflows/windows-release.yml` (new), `app/src-tauri/tauri.conf.json`, `app/src-tauri/src/lib.rs` |
+| [19](19-installer-smoke-test.md) | Installer smoke test + manual verification checklist | 18 | `.github/workflows/windows-release.yml`, `docs/standalone/VERIFY-WINDOWS.md` (new) |
+| [20](20-smartscreen-docs.md) | SmartScreen bypass documentation | — (parallel) | `docs/standalone/SMARTSCREEN.md` (new) |
+| [21](21-quickstart-guide.md) | Researcher quickstart guide (Sphinx / MyST → Read the Docs) | 18, 19, 20 | `docs/standalone/quickstart.md` (new), `docs/` (toctree), this README |
+
+### Phase 4 acceptance (rolls up 17–21)
+
+- A tagged push (`v*`) yields a downloadable NSIS installer artifact in GitHub Actions.
+- The installer is per-user (no admin rights) and embeds the WebView2 offline
+  bootstrapper (no network during install).
+- The full frozen `bart-sidecar.exe` passes `/healthz` + `/score` smoke tests on
+  `windows-latest` CI.
+- Silent install on CI lays down the app executable + sidecar in the expected paths.
+- A manual test on a Windows 11 VM (following `VERIFY-WINDOWS.md`) completes a full
+  session end-to-end: SmartScreen bypass → launch → consent → ID → task → debrief →
+  data files written.
+- `SMARTSCREEN.md` lets a non-technical researcher bypass the unsigned-app warning.
+- `docs/standalone/quickstart.md` compiles to Read the Docs; a researcher can follow
+  it to install, configure, run, and collect data.
+- `npm test`, `tsc --noEmit`, `vite build`, and `pytest` stay green locally.
+
+> Out of scope for Phase 4 (later phases): code signing (documented as future
+> enhancement), macOS distribution/notarization, auto-update, and the JOSS rewrite
+> (Phase 5).

@@ -1,9 +1,10 @@
 name: Sidecar (Windows freeze)
 
-# De-risk gate for Phase 1 (SPEC §9/§12/§18): prove the scipy-free scoring
-# engine freezes with PyInstaller and runs on Windows before building the UI.
-# Windows artifacts can only be produced on Windows (no cross-compile), so this
-# runs on a windows-latest runner and is the open progress record for the freeze.
+# De-risk gate (SPEC §9/§12/§18): prove the scipy-free scoring engine freezes
+# with PyInstaller and runs on Windows. This workflow freezes *both* the tiny
+# hello-score (Phase 1 regression guard) and the full bart-sidecar (Phase 4),
+# smoke-tests each, and uploads the sidecar binary named for Tauri's externalBin
+# triple so the windows-release workflow (issue 18) can bundle it.
 
 on:
   push:
@@ -32,6 +33,8 @@ jobs:
         # Confirms the scipy-free engine and the sidecar are cross-platform.
         run: python -m pytest -q
 
+      # ── hello-score (Phase 1 regression guard) ─────────────────────────
+
       - name: Freeze hello-score with PyInstaller
         run: >
           python -m PyInstaller app/sidecar/hello-score.spec
@@ -50,4 +53,102 @@ jobs:
         with:
           name: hello-score-windows
           path: dist/hello-score.exe
+          if-no-files-found: error
+
+      # ── full bart-sidecar (Phase 4, issue 17) ─────────────────────────
+
+      - name: Freeze bart-sidecar with PyInstaller
+        run: >
+          python -m PyInstaller app/sidecar/sidecar.spec
+          --distpath dist --workpath build --noconfirm
+
+      - name: Smoke-test the frozen bart-sidecar.exe
+        shell: pwsh
+        run: |
+          # Spawn the frozen sidecar in the background and capture its PORT
+          $proc = Start-Process -FilePath ".\dist\bart-sidecar.exe" `
+            -PassThru -NoNewWindow -RedirectStandardOutput "sidecar-stdout.txt"
+
+          # Wait for PORT=<n> in stdout (up to 120s — one-file binaries unpack)
+          $port = $null
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 500
+            if (Test-Path "sidecar-stdout.txt") {
+              $lines = Get-Content "sidecar-stdout.txt" -ErrorAction SilentlyContinue
+              foreach ($line in $lines) {
+                if ($line -match "PORT=(\d+)") {
+                  $port = $Matches[1]
+                  break
+                }
+              }
+              if ($port) { break }
+            }
+          }
+
+          if (-not $port) {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+            throw "bart-sidecar.exe did not announce a PORT within 120s"
+          }
+          Write-Host "Sidecar announced PORT=$port"
+
+          # Wait for /healthz (up to 30s after port announcement)
+          $base = "http://127.0.0.1:$port"
+          $healthy = $false
+          $deadline = (Get-Date).AddSeconds(30)
+          while ((Get-Date) -lt $deadline) {
+            try {
+              $resp = Invoke-RestMethod -Uri "$base/healthz" -TimeoutSec 2
+              if ($resp.status -eq "ok") { $healthy = $true; break }
+            } catch { Start-Sleep -Milliseconds 500 }
+          }
+
+          if (-not $healthy) {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+            throw "/healthz did not return status:ok"
+          }
+          Write-Host "/healthz OK: $($resp | ConvertTo-Json -Compress)"
+
+          # POST /score with a minimal 3-balloon session
+          $body = @{
+            session = @{
+              session_id   = "ci-smoke"
+              game_type    = "BART_RISK"
+              candidate_id = "ci-1"
+              events       = @(
+                @{ timestamp = 1.0; type = "pump";    payload = @{ color = "purple" } },
+                @{ timestamp = 2.0; type = "pump";    payload = @{ color = "purple" } },
+                @{ timestamp = 3.0; type = "collect"; payload = @{ color = "purple" } },
+                @{ timestamp = 4.0; type = "pump";    payload = @{ color = "teal" } },
+                @{ timestamp = 5.0; type = "collect"; payload = @{ color = "teal" } },
+                @{ timestamp = 6.0; type = "pump";    payload = @{ color = "orange" } },
+                @{ timestamp = 7.0; type = "collect"; payload = @{ color = "orange" } }
+              )
+            }
+          } | ConvertTo-Json -Depth 5
+
+          $score = Invoke-RestMethod -Uri "$base/score" -Method Post `
+            -ContentType "application/json" -Body $body -TimeoutSec 10
+
+          if (-not $score.raw_metrics) {
+            throw "/score returned empty raw_metrics"
+          }
+          if ($score.raw_metrics.total_balloons -ne 3) {
+            throw "/score total_balloons expected 3, got $($score.raw_metrics.total_balloons)"
+          }
+          Write-Host "/score OK: total_balloons=$($score.raw_metrics.total_balloons)"
+
+          # Clean up
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "bart-sidecar smoke test passed"
+
+      - name: Rename sidecar for Tauri externalBin triple
+        shell: pwsh
+        run: |
+          Rename-Item "dist\bart-sidecar.exe" "bart-sidecar-x86_64-pc-windows-msvc.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-windows-exe
+          path: dist/bart-sidecar-x86_64-pc-windows-msvc.exe
           if-no-files-found: error
