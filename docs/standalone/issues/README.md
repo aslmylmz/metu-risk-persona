@@ -75,3 +75,36 @@ plumbing (12).
 > Out of scope for Phase 2 (later phases): the no-code Study-Setup UI + live EV
 > preview (Phase 3), the Windows CI `tauri build` + installer + signing (Phase 4),
 > and the JOSS rewrite (Phase 5).
+
+## Phase 3 — Config UX
+
+The no-code **Study Setup** + **Run** modes in the Vite SPA (SPEC §11). The sidecar
+endpoints already exist (`/validate-config`, `/preview`, `/score`, `/write-output`),
+so this phase is frontend + thin wiring. Sequenced foundation-first: stand up mode
+routing + the typed config store (13) before the researcher form (14) and the live EV
+preview (15), then the config-driven Run mode + per-study scoring (16) that satisfies
+the §17 acceptance. Decisions taken at kickoff: hand-rolled SVG preview (no charting
+dep), hand-written TS config types with `/validate-config` as the authority, config
+threaded into both `/score` and `/write-output`, a tr/en string table extracted from
+the task, and the existing results screen reused as the debrief.
+
+| # | Issue | Depends on | Touches |
+|---|---|---|---|
+| [13](13-config-ux-app-shell.md) | App shell: mode routing + active-config store + TS config types | Phase 2 | `app/src/App.tsx`, `app/src/lib/config.ts` (new), `tests/` |
+| [14](14-study-setup-form.md) | Study Setup form + `study.json` save/load + `/validate-config` | 13 | `app/src/setup/` (new), `app/src/lib/api.ts`, `app/src/lib/desktop.ts` (reuse) |
+| [15](15-live-ev-preview.md) | Live EV-curve + optimum preview (hand-rolled SVG) | 13 (parallel to 14) | `app/src/setup/` (new), `app/src/lib/api.ts` |
+| [16](16-run-mode-config-driven-task.md) | Run mode: config-driven task + consent/ID/debrief + per-study scoring | 13, 14 | `app/src/BartGame.tsx`, `app/src/run/` (new), `app/src/lib/{api,i18n}.ts`, `app/sidecar/{app,models}.py`, `tests/` |
+
+### Phase 3 acceptance (rolls up 13–16)
+
+- A non-coder can change the hazard family + parameters in Study Setup, **see the
+  optimum update** (live EV preview), **save a study** to `study.json`, switch to Run,
+  and **run it**.
+- The run uses the configured colors / `max_pumps` / `trials` / hazard / reward /
+  language; a seeded run replays identically.
+- The persisted `*_events.jsonl` / `*_metrics.json` / `*_config.json` reflect **that**
+  study (scored against its optima; config snapshot is the run's config).
+- `npm test`, `tsc --noEmit`, `vite build`, and `pytest` all stay green.
+
+> Out of scope for Phase 3 (later phases): the Windows CI `tauri build` + installer +
+> signing (Phase 4) and the JOSS rewrite (Phase 5).
