@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { persistSession, submitSession } from "./lib/api";
 import type { TaskConfig } from "./lib/config";
 import type { GameEvent } from "./lib/events";
 import { taskStrings } from "./lib/i18n";
 import { buildSessionPayload } from "./lib/session";
+import {
+  advance,
+  type EngineCtx,
+  type EngineEvent,
+  type GameState,
+  initialState,
+} from "./lib/taskEngine";
+import { type AssessmentResult, Debrief } from "./run/Debrief";
 import { type Balloon, buildSequence, mulberry32 } from "./run/sequence";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -15,67 +23,13 @@ interface BalloonState {
     status: "active" | "collected" | "exploded";
 }
 
-interface ColorMetrics {
-    color: string;
-    average_pumps: number;
-    explosion_rate: number;
-    total_balloons: number;
-    risk_profile: string;
-}
-
-interface AssessmentResult {
-    session_id: string;
-    game_type: string;
-    raw_metrics: {
-        average_pumps_adjusted: number;
-        explosion_rate: number;
-        mean_latency_between_pumps: number;
-        total_balloons: number;
-        total_pumps: number;
-        total_explosions: number;
-        total_collections: number;
-        color_metrics: ColorMetrics[];
-        learning_rate: number;
-        risk_adjustment_score: number;
-        color_discrimination_index: number;
-        impulsivity_index: number;
-        patience_index: number;
-        response_consistency: number;
-        adaptive_strategy_score: number;
-    };
-    normalized_scores: Array<{
-        metric_name: string;
-        raw_value: number;
-        z_score: number;
-        percentile: number;
-    }>;
-    profile_traits: Record<
-        string,
-        { level: string; percentile: number; z_score: number }
-    >;
-}
-
-// ── Config ──────────────────────────────────────────────────────────────────
-// The balloon sequence is built from the study TaskConfig at startGame (see
-// run/sequence.ts): `trials` balloons per color, seeded-shuffled, each carrying
-// its precomputed hazard vector. Reward, colors, caps, and language all come from
-// the config — nothing about the task is hardcoded here anymore.
-
-// ── Turkish Label Maps (results-modal metric labels; full i18n is a follow-up) ──
-
-const COLOR_TR: Record<string, string> = {
-    purple: "Mor",
-    teal: "Camgöbeği",
-    orange: "Turuncu",
-};
-
-const RISK_TR: Record<string, string> = {
-    Low: "Düşük",
-    Medium: "Orta",
-    High: "Yüksek",
-};
-
 // ── Component ───────────────────────────────────────────────────────────────
+//
+// A thin rendering shell over the pure task engine (lib/taskEngine.ts). The engine
+// owns the gameplay rules; this component owns the seeded rng, timestamps, the
+// feedback delay, and the view. It dispatches user input to `advance()` and derives
+// the view names (gamePhase, currentBalloon, …) from the engine state so the markup
+// stays declarative. The results screen is the standalone <Debrief>.
 
 interface BartGameProps {
     config: TaskConfig;
@@ -87,51 +41,40 @@ interface BartGameProps {
 export default function BartGame({ config, hazards, candidateId, onComplete }: BartGameProps) {
     const eventLogRef = useRef<GameEvent[]>([]);
     const sessionIdRef = useRef(crypto.randomUUID());
-    const sessionConfigRef = useRef<Balloon[]>([]);
+    const sequenceRef = useRef<Balloon[]>([]);
     const rngRef = useRef<() => number>(() => Math.random());
+    const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const t = taskStrings(config.language);
     const totalBalloons = config.colors.reduce((n, c) => n + c.trials, 0);
 
-    const [currentBalloon, setCurrentBalloon] = useState<BalloonState>({
-        id: 1,
-        pumps: 0,
-        status: "active",
-    });
-    const [completedBalloons, setCompletedBalloons] = useState<BalloonState[]>(
-        []
-    );
-    const [totalScore, setTotalScore] = useState(0);
-    const [gamePhase, setGamePhase] = useState<
-        "idle" | "playing" | "feedback" | "finished" | "results"
-    >("idle");
+    const [engine, setEngine] = useState<GameState>(initialState);
+    const [started, setStarted] = useState(false);
     const [feedbackMessage, setFeedbackMessage] = useState("");
     const [results, setResults] = useState<AssessmentResult | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const balloonCount = completedBalloons.length + 1;
+    const ctx = (): EngineCtx => ({ sequence: sequenceRef.current, reward: config.reward_per_pump });
 
-    // Record high-resolution monotonic timestamps
-    const recordEvent = useCallback(
-        (type: GameEvent["type"], extra: Record<string, unknown> = {}) => {
-            const balloon = sessionConfigRef.current[currentBalloon.id - 1];
-            const colorName = balloon?.colorName ?? "";
+    /** Stamp the engine's events with a monotonic timestamp and append to the log. */
+    const logEvents = (events: EngineEvent[]) => {
+        const ts = performance.now();
+        for (const e of events) {
+            eventLogRef.current.push({ timestamp: ts, type: e.type, payload: e.payload });
+        }
+    };
 
-            eventLogRef.current.push({
-                timestamp: performance.now(),
-                type,
-                payload: {
-                    balloon_id: currentBalloon.id,
-                    color: colorName,
-                    ...extra
-                },
-            });
-        },
-        [currentBalloon.id]
-    );
+    /** After feedback, advance to the next balloon (or finish) — the timing the
+     * engine deliberately leaves to the view. */
+    const scheduleNext = (delay: number) => {
+        feedbackTimer.current = setTimeout(() => {
+            setEngine((s) => advance(s, { type: "next" }, ctx()).state);
+            setFeedbackMessage("");
+        }, delay);
+    };
 
-    const startGame = useCallback(() => {
+    const startGame = () => {
         eventLogRef.current = [];
         sessionIdRef.current = crypto.randomUUID();
         // One seeded rng drives both the shuffle and the per-pump burst draws, so a
@@ -139,127 +82,40 @@ export default function BartGame({ config, hazards, candidateId, onComplete }: B
         const seed = config.seed ?? ((Math.random() * 2 ** 32) >>> 0);
         const rng = mulberry32(seed);
         rngRef.current = rng;
-        sessionConfigRef.current = buildSequence(config, hazards, rng);
-
-        setCurrentBalloon({ id: 1, pumps: 0, status: "active" });
-        setCompletedBalloons([]);
-        setTotalScore(0);
+        sequenceRef.current = buildSequence(config, hazards, rng);
+        setEngine(initialState());
         setResults(null);
-        setGamePhase("playing");
-    }, [config, hazards]);
+        setFeedbackMessage("");
+        setStarted(true);
+    };
 
-    const handlePump = useCallback(() => {
-        if (gamePhase !== "playing" || currentBalloon.status !== "active") return;
-
-        const balloon = sessionConfigRef.current[currentBalloon.id - 1];
-        const maxPumps = balloon ? balloon.maxPumps : 0;
-        if (currentBalloon.pumps >= maxPumps) return; // at the cap — cannot pump further
-
-        const newPumps = currentBalloon.pumps + 1;
-        recordEvent("pump");
-
-        // Burst from the config's precomputed hazard vector: P(burst at pump k) =
-        // hazard[k-1], drawn from the seeded rng so the run is reproducible.
-        const h = balloon?.hazard[newPumps - 1] ?? 1;
-        const explode = rngRef.current() < h;
-
-        if (explode) {
-            recordEvent("explode", { pump_count: newPumps });
-            setCurrentBalloon((b) => ({ ...b, pumps: newPumps, status: "exploded" }));
+    const handlePump = () => {
+        if (engine.phase !== "playing" || engine.status !== "active") return;
+        const { state, events } = advance(engine, { type: "pump", draw: rngRef.current() }, ctx());
+        logEvents(events);
+        setEngine(state);
+        if (state.status === "exploded") {
             setFeedbackMessage(t.exploded);
-            setGamePhase("feedback");
-
-            setTimeout(() => {
-                const exploded: BalloonState = {
-                    id: currentBalloon.id,
-                    pumps: newPumps,
-                    status: "exploded",
-                };
-                setCompletedBalloons((prev) => {
-                    const updated = [...prev, exploded];
-                    if (updated.length >= totalBalloons) {
-                        setGamePhase("finished");
-                    } else {
-                        setCurrentBalloon({
-                            id: currentBalloon.id + 1,
-                            pumps: 0,
-                            status: "active",
-                        });
-                        setGamePhase("playing");
-                    }
-                    return updated;
-                });
-                setFeedbackMessage("");
-            }, 1200);
-        } else {
-            setCurrentBalloon((b) => ({ ...b, pumps: newPumps }));
+            scheduleNext(1200);
         }
-    }, [gamePhase, currentBalloon, recordEvent, t, totalBalloons]);
+    };
 
-    const handleCollect = useCallback(() => {
-        if (
-            gamePhase !== "playing" ||
-            currentBalloon.status !== "active" ||
-            currentBalloon.pumps === 0
-        )
-            return;
-
-        recordEvent("collect");
-
-        const money = currentBalloon.pumps * config.reward_per_pump;
-        setTotalScore((s) => s + money);
-        setCurrentBalloon((b) => ({ ...b, status: "collected" }));
+    const handleCollect = () => {
+        if (engine.phase !== "playing" || engine.status !== "active" || engine.pumps === 0) return;
+        const money = engine.pumps * config.reward_per_pump;
+        const { state, events } = advance(engine, { type: "collect" }, ctx());
+        logEvents(events);
+        setEngine(state);
         setFeedbackMessage(`${t.collected} $${money.toFixed(2)}`);
-        setGamePhase("feedback");
+        scheduleNext(1000);
+    };
 
-        setTimeout(() => {
-            const collected: BalloonState = {
-                id: currentBalloon.id,
-                pumps: currentBalloon.pumps,
-                status: "collected",
-            };
-            setCompletedBalloons((prev) => {
-                const updated = [...prev, collected];
-                if (updated.length >= totalBalloons) {
-                    setGamePhase("finished");
-                } else {
-                    setCurrentBalloon({
-                        id: currentBalloon.id + 1,
-                        pumps: 0,
-                        status: "active",
-                    });
-                    setGamePhase("playing");
-                }
-                return updated;
-            });
-            setFeedbackMessage("");
-        }, 1000);
-    }, [gamePhase, currentBalloon, recordEvent, config.reward_per_pump, t, totalBalloons]);
-
-    const handleSubmit = useCallback(async () => {
+    const handleSubmit = async () => {
         setIsSubmitting(true);
-
-        const payload = buildSessionPayload(
-            sessionIdRef.current,
-            candidateId,
-            eventLogRef.current,
-        );
-
-        const colorDist: Record<string, number> = {};
-        payload.events.forEach(e => {
-            const color = String(e.payload.color || "MISSING");
-            colorDist[color] = (colorDist[color] || 0) + 1;
-        });
-        
-        console.log("Submitting BART assessment:", {
-            totalEvents: payload.events.length,
-            colorDistribution: colorDist
-        });
-
+        const payload = buildSessionPayload(sessionIdRef.current, candidateId, eventLogRef.current);
         try {
             const data = await submitSession<AssessmentResult>(payload, config);
             setResults(data);
-            setGamePhase("results");
 
             // Persist the session locally via the sidecar (best-effort; the engine
             // owns file writing, SPEC §13). A write failure must not block results.
@@ -267,31 +123,43 @@ export default function BartGame({ config, hazards, candidateId, onComplete }: B
                 console.error("Failed to persist session:", persistErr),
             );
 
-            if (onComplete) {
-                onComplete(data);
-            }
+            if (onComplete) onComplete(data);
         } catch (err) {
             console.error("Submission error:", err);
-            setFeedbackMessage(
-                err instanceof Error ? err.message : "Failed to submit"
-            );
+            setFeedbackMessage(err instanceof Error ? err.message : "Failed to submit");
         } finally {
             setIsSubmitting(false);
         }
-    }, [candidateId, onComplete, config]);
+    };
 
-    const handleKeyDown = useCallback(
-        (e: React.KeyboardEvent) => {
-            if (e.code === "Space") {
-                e.preventDefault();
-                handlePump();
-            } else if (e.code === "Enter") {
-                e.preventDefault();
-                handleCollect();
-            }
-        },
-        [handlePump, handleCollect]
-    );
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.code === "Space") {
+            e.preventDefault();
+            handlePump();
+        } else if (e.code === "Enter") {
+            e.preventDefault();
+            handleCollect();
+        }
+    };
+
+    // Derived view state: map the engine onto the names the markup already uses.
+    const gamePhase: "idle" | "playing" | "feedback" | "finished" | "results" = results
+        ? "results"
+        : !started
+            ? "idle"
+            : engine.phase;
+    const currentBalloon: BalloonState = {
+        id: engine.index + 1,
+        pumps: engine.pumps,
+        status: engine.status,
+    };
+    const completedBalloons: BalloonState[] = engine.completed.map((c, i) => ({
+        id: i + 1,
+        pumps: c.pumps,
+        status: c.status,
+    }));
+    const totalScore = engine.score;
+    const balloonCount = engine.completed.length + 1;
 
     useEffect(() => {
         if (gamePhase === "playing" && containerRef.current) {
@@ -299,7 +167,12 @@ export default function BartGame({ config, hazards, candidateId, onComplete }: B
         }
     }, [gamePhase]);
 
-    const currentConfig = sessionConfigRef.current[currentBalloon.id - 1];
+    // Clear any pending feedback timer on unmount.
+    useEffect(() => () => {
+        if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    }, []);
+
+    const currentConfig = sequenceRef.current[engine.index];
     const balloonColor = currentConfig ? currentConfig.displayHex : "#9CA3AF";
     const balloonScale = 1 + currentBalloon.pumps * 0.08;
     const balloonSize = 100 * balloonScale;
@@ -658,321 +531,14 @@ export default function BartGame({ config, hazards, candidateId, onComplete }: B
                 </div>
             )}
 
-            {/* ── Results Modal ────────────────────────────────────────────────── */}
+            {/* ── Debrief (results screen) ─────────────────────────────────────── */}
             {gamePhase === "results" && results && (
-                <div className="flex flex-col items-center py-10 gap-6">
-                    <div className="text-5xl">🎯</div>
-                    <h2
-                        style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff" }}
-                    >
-                        Bilişsel Profiliniz
-                    </h2>
-
-                    {results.raw_metrics.adaptive_strategy_score !== undefined && (
-                        <div
-                            style={{
-                                fontSize: "1.6rem",
-                                fontWeight: 800,
-                                padding: "16px 32px",
-                                borderRadius: "12px",
-                                background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
-                                border: "1px solid rgba(255,255,255,0.2)",
-                                textAlign: "center",
-                            }}
-                        >
-                            <div style={{ fontSize: "0.75rem", opacity: 0.9, marginBottom: "4px" }}>
-                                Uyum Stratejisi Puanı
-                            </div>
-                            {results.raw_metrics.adaptive_strategy_score.toFixed(0)}/100
-                        </div>
-                    )}
-
-                    {results.raw_metrics.color_metrics && results.raw_metrics.color_metrics.length > 0 && (
-                        <div style={{ width: "100%", maxWidth: "480px" }}>
-                            <h3
-                                style={{
-                                    fontSize: "0.85rem",
-                                    color: "#9CA3AF",
-                                    marginBottom: "12px",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                    textAlign: "center",
-                                }}
-                            >
-                                Balon Rengine Göre Performans
-                            </h3>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                {results.raw_metrics.color_metrics.map((cm) => (
-                                    <div
-                                        key={cm.color}
-                                        style={{
-                                            padding: "12px 16px",
-                                            borderRadius: "10px",
-                                            background: "rgba(255,255,255,0.03)",
-                                            border: "1px solid rgba(255,255,255,0.08)",
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                            alignItems: "center",
-                                        }}
-                                    >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                            <div
-                                                style={{
-                                                    width: "12px",
-                                                    height: "12px",
-                                                    borderRadius: "50%",
-                                                    background:
-                                                        cm.color === "purple" ? "#A855F7" :
-                                                        cm.color === "teal" ? "#14B8A6" :
-                                                        "#F97316",
-                                                }}
-                                            />
-                                            <span style={{ color: "#fff", fontWeight: 600 }}>
-                                                {COLOR_TR[cm.color] ?? cm.color} ({RISK_TR[cm.risk_profile] ?? cm.risk_profile} risk)
-                                            </span>
-                                        </div>
-                                        <div style={{ textAlign: "right" }}>
-                                            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff" }}>
-                                                {cm.average_pumps.toFixed(1)} pompa
-                                            </div>
-                                            <div style={{ fontSize: "0.75rem", color: "#6B7280" }}>
-                                                %{(cm.explosion_rate * 100).toFixed(0)} patladı
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div style={{ width: "100%", maxWidth: "480px" }}>
-                        <h3
-                            style={{
-                                fontSize: "0.85rem",
-                                color: "#9CA3AF",
-                                marginBottom: "12px",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                textAlign: "center",
-                            }}
-                        >
-                            Öğrenme ve Uyum
-                        </h3>
-                        <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: "10px",
-                            }}
-                        >
-                            {[
-                                {
-                                    label: "Öğrenme Hızı",
-                                    value: results.raw_metrics.learning_rate?.toFixed(2) || "0.00",
-                                    subtitle: "Davranışsal uyum",
-                                },
-                                {
-                                    label: "Renk Ayrımı",
-                                    value: results.raw_metrics.color_discrimination_index?.toFixed(2) || "0.00",
-                                    subtitle: "Örüntü tanıma",
-                                },
-                                {
-                                    label: "Risk Ayarlaması",
-                                    value: results.raw_metrics.risk_adjustment_score?.toFixed(0) || "0",
-                                    subtitle: "Strateji kalibrasyonu",
-                                },
-                                {
-                                    label: "Tepki Tutarlılığı",
-                                    value: results.raw_metrics.response_consistency?.toFixed(2) || "0.00",
-                                    subtitle: "Davranışsal istikrar",
-                                },
-                            ].map((metric) => (
-                                <div
-                                    key={metric.label}
-                                    style={{
-                                        padding: "12px",
-                                        borderRadius: "10px",
-                                        background: "rgba(255,255,255,0.03)",
-                                        border: "1px solid rgba(255,255,255,0.08)",
-                                        textAlign: "center",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            fontSize: "0.7rem",
-                                            color: "#6B7280",
-                                            textTransform: "uppercase",
-                                            letterSpacing: "0.05em",
-                                            marginBottom: "4px",
-                                        }}
-                                    >
-                                        {metric.label}
-                                    </div>
-                                    <div
-                                        style={{
-                                            fontSize: "1.3rem",
-                                            fontWeight: 700,
-                                            color: "#fff",
-                                            marginBottom: "2px",
-                                        }}
-                                    >
-                                        {metric.value}
-                                    </div>
-                                    <div
-                                        style={{
-                                            fontSize: "0.65rem",
-                                            color: "#6B7280",
-                                        }}
-                                    >
-                                        {metric.subtitle}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div style={{ width: "100%", maxWidth: "480px" }}>
-                        <h3
-                            style={{
-                                fontSize: "0.85rem",
-                                color: "#9CA3AF",
-                                marginBottom: "12px",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                textAlign: "center",
-                            }}
-                        >
-                            Davranışsal Göstergeler
-                        </h3>
-                        <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: "10px",
-                            }}
-                        >
-                            {[
-                                {
-                                    label: "Dürtüsellik",
-                                    value: `%${((results.raw_metrics.impulsivity_index || 0) * 100).toFixed(0)}`,
-                                    subtitle: "Yüksek riskli patlamalar",
-                                },
-                                {
-                                    label: "Sabır",
-                                    value: results.raw_metrics.patience_index?.toFixed(1) || "0.0",
-                                    subtitle: "Düşük riskli istismar",
-                                },
-                                {
-                                    label: "Ort. Pompa",
-                                    value: results.raw_metrics.average_pumps_adjusted.toFixed(1),
-                                    subtitle: "Genel risk iştahı",
-                                },
-                                {
-                                    label: "Patlama Oranı",
-                                    value: `%${(results.raw_metrics.explosion_rate * 100).toFixed(0)}`,
-                                    subtitle: "Başarısızlık oranı",
-                                },
-                            ].map((metric) => (
-                                <div
-                                    key={metric.label}
-                                    style={{
-                                        padding: "12px",
-                                        borderRadius: "10px",
-                                        background: "rgba(255,255,255,0.03)",
-                                        border: "1px solid rgba(255,255,255,0.08)",
-                                        textAlign: "center",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            fontSize: "0.7rem",
-                                            color: "#6B7280",
-                                            textTransform: "uppercase",
-                                            letterSpacing: "0.05em",
-                                            marginBottom: "4px",
-                                        }}
-                                    >
-                                        {metric.label}
-                                    </div>
-                                    <div
-                                        style={{
-                                            fontSize: "1.3rem",
-                                            fontWeight: 700,
-                                            color: "#fff",
-                                            marginBottom: "2px",
-                                        }}
-                                    >
-                                        {metric.value}
-                                    </div>
-                                    <div
-                                        style={{
-                                            fontSize: "0.65rem",
-                                            color: "#6B7280",
-                                        }}
-                                    >
-                                        {metric.subtitle}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {results.normalized_scores.length > 0 && (
-                        <div style={{ width: "100%", maxWidth: "420px" }}>
-                            <h3
-                                style={{
-                                    fontSize: "0.9rem",
-                                    color: "#9CA3AF",
-                                    marginBottom: "8px",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                }}
-                            >
-                                Popülasyon Karşılaştırması
-                            </h3>
-                            {results.normalized_scores.map((score) => (
-                                <div
-                                    key={score.metric_name}
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        padding: "10px 14px",
-                                        borderBottom: "1px solid rgba(255,255,255,0.05)",
-                                    }}
-                                >
-                                    <span style={{ color: "#9CA3AF", fontSize: "0.85rem" }}>
-                                        {score.metric_name.replaceAll("_", " ")}
-                                    </span>
-                                    <div style={{ textAlign: "right" }}>
-                                        <span
-                                            style={{
-                                                color: "#fff",
-                                                fontWeight: 600,
-                                                fontSize: "0.95rem",
-                                            }}
-                                        >
-                                            {score.percentile.toFixed(0)}.
-                                        </span>
-                                        <span
-                                            style={{
-                                                color: "#6B7280",
-                                                fontSize: "0.75rem",
-                                                marginLeft: "6px",
-                                            }}
-                                        >
-                                            (z={score.z_score.toFixed(2)})
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
+                <div className="flex flex-col items-center gap-6">
+                    <Debrief results={results} language={config.language} />
                     <button
                         onClick={startGame}
                         style={{
-                            marginTop: "1rem",
+                            marginBottom: "2rem",
                             padding: "12px 36px",
                             fontSize: "1rem",
                             fontWeight: 600,
@@ -981,13 +547,6 @@ export default function BartGame({ config, hazards, candidateId, onComplete }: B
                             border: "1px solid rgba(255,255,255,0.15)",
                             borderRadius: "10px",
                             cursor: "pointer",
-                            transition: "background 0.15s",
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "rgba(255,255,255,0.12)";
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "rgba(255,255,255,0.08)";
                         }}
                     >
                         Tekrar Oyna
