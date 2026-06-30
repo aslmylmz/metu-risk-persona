@@ -1,0 +1,81 @@
+name: Windows release (Tauri NSIS installer)
+
+# Phase 4 / issue 18 (SPEC §12, §14): build the distributable Windows artifact.
+# Tag-triggered only — a `v*` tag freezes the full sidecar, then runs `tauri build`
+# to emit a per-user NSIS installer that embeds Microsoft's offline WebView2 installer
+# (zero network at install time, SPEC §4). Dev pushes are covered by the lighter
+# sidecar-windows.yml (issue 17), which verifies the frozen sidecar on every change.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  # Freeze the full bart-sidecar and hand it to the bundle job under the externalBin
+  # target-triple name Tauri resolves on windows-latest.
+  freeze-sidecar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install (engine + sidecar + build + dev)
+        run: python -m pip install -e ".[sidecar,build,dev]"
+
+      - name: Freeze bart-sidecar with PyInstaller
+        run: >
+          python -m PyInstaller app/sidecar/sidecar.spec
+          --distpath dist --workpath build --noconfirm
+
+      - name: Rename sidecar for Tauri externalBin triple
+        shell: pwsh
+        run: |
+          Rename-Item "dist\bart-sidecar.exe" "bart-sidecar-x86_64-pc-windows-msvc.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-windows-exe
+          path: dist/bart-sidecar-x86_64-pc-windows-msvc.exe
+          if-no-files-found: error
+
+  # Bundle the SPA + Rust shell + frozen sidecar into an NSIS per-user installer.
+  build-installer:
+    runs-on: windows-latest
+    needs: freeze-sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri looks for the externalBin at binaries/bart-sidecar-<triple>.exe; the
+      # artifact carries exactly that name, so it lands ready to bundle. binaries/ is
+      # gitignored and populated fresh here.
+      - name: Download frozen sidecar into the externalBin dir
+        uses: actions/download-artifact@v4
+        with:
+          name: sidecar-windows-exe
+          path: app/src-tauri/binaries
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps
+        run: npm ci --prefix app
+
+      # `tauri build` runs the configured beforeBuildCommand (vite build) first, then
+      # bundles the NSIS installer with the embedded offline WebView2 installer.
+      - name: Build the Tauri NSIS installer
+        run: npm run --prefix app tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bart-installer-windows
+          path: app/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

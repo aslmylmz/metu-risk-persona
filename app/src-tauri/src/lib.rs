@@ -45,6 +45,15 @@ fn sidecar_command() -> Command {
     cmd
 }
 
+/// The bundled sidecar's on-disk name. Tauri copies the externalBin next to the app
+/// executable with its target triple stripped but the platform extension kept, so this
+/// resolves to `bart-sidecar.exe` on Windows and bare `bart-sidecar` elsewhere. Gated to
+/// the builds that reference it (release + tests) so `tauri dev` stays dead-code-clean.
+#[cfg(any(not(debug_assertions), test))]
+fn sidecar_binary_name() -> String {
+    format!("bart-sidecar{}", std::env::consts::EXE_SUFFIX)
+}
+
 /// Release: the PyInstaller binary bundled next to the app executable (externalBin).
 #[cfg(not(debug_assertions))]
 fn sidecar_command() -> Command {
@@ -52,7 +61,7 @@ fn sidecar_command() -> Command {
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
         .expect("the app executable has a parent directory");
-    Command::new(exe_dir.join("bart-sidecar"))
+    Command::new(exe_dir.join(sidecar_binary_name()))
 }
 
 /// Poll `/healthz` until the sidecar is serving, or give up after ~5s.
@@ -207,5 +216,20 @@ mod tests {
         write_study_file(path.clone(), "{\"title\":\"t\"}".into()).unwrap();
         assert_eq!(read_study_file(path.clone()).unwrap(), "{\"title\":\"t\"}");
         let _ = std::fs::remove_file(path);
+    }
+
+    // Tauri strips the externalBin target triple at bundle time but keeps the
+    // platform extension, so the release shell must look for the sidecar under its
+    // OS-specific name: `bart-sidecar.exe` on Windows, bare `bart-sidecar` elsewhere.
+    #[test]
+    #[cfg(windows)]
+    fn release_sidecar_binary_has_exe_suffix() {
+        assert_eq!(sidecar_binary_name(), "bart-sidecar.exe");
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn release_sidecar_binary_is_extensionless() {
+        assert_eq!(sidecar_binary_name(), "bart-sidecar");
     }
 }
