@@ -79,3 +79,77 @@ jobs:
           name: bart-installer-windows
           path: app/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  # Silently install the NSIS artifact and assert the packaged file layout — catches
+  # missing-sidecar / wrong-path regressions without fragile GUI automation. The full
+  # interactive flow (SmartScreen → window → session → data) is the manual
+  # VERIFY-WINDOWS.md checklist's job.
+  smoke-install:
+    runs-on: windows-latest
+    needs: build-installer
+    steps:
+      - name: Download the NSIS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: bart-installer-windows
+          path: installer
+
+      - name: Silent install + assert file layout
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem installer -Filter *.exe | Select-Object -First 1).FullName
+          if (-not $installer) { throw "no installer .exe in the artifact" }
+          Write-Host "Installer: $installer"
+
+          # NSIS: /S = silent, /D= sets the install dir (must be last, unquoted, no
+          # spaces). RUNNER_TEMP has no spaces, so it is a safe /D target.
+          $dir = "$env:RUNNER_TEMP\bartapp"
+          Start-Process -FilePath $installer -ArgumentList "/S","/D=$dir" -Wait
+          Write-Host "Installed to: $dir"
+          Get-ChildItem $dir -Recurse | Select-Object FullName | Format-Table -AutoSize
+
+          # Tauri copies the externalBin next to the app with the target triple
+          # stripped, so the installed sidecar is bart-sidecar.exe (cf. issue 18's
+          # sidecar_binary_name in lib.rs) — NOT the upload's triple name.
+          $sidecar = Join-Path $dir "bart-sidecar.exe"
+          if (-not (Test-Path $sidecar)) { throw "missing sidecar at $sidecar" }
+          Write-Host "OK: sidecar present at $sidecar"
+
+          # Main app exe: any .exe that is not the sidecar or the NSIS uninstaller.
+          $app = Get-ChildItem $dir -Filter *.exe |
+            Where-Object { $_.Name -ne "bart-sidecar.exe" -and $_.Name -notlike "uninstall*" } |
+            Select-Object -First 1
+          if (-not $app) { throw "no app executable found in $dir" }
+          Write-Host "OK: app executable $($app.Name)"
+
+          # Hand the launch step the app path (the file-layout asserts above are the gate).
+          "APP_EXE=$($app.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Best-effort launch + healthz probe
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          # Advisory only: CI runners may lack a display, so a failed launch must not
+          # fail the job. The Rust shell logs "sidecar ready at http://127.0.0.1:<port>"
+          # to stderr once the sidecar is healthy.
+          $proc = Start-Process -FilePath $env:APP_EXE -PassThru `
+            -RedirectStandardOutput "app-stdout.txt" -RedirectStandardError "app-stderr.txt"
+          $base = $null
+          $deadline = (Get-Date).AddSeconds(30)
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 500
+            $log = (Get-Content app-stdout.txt, app-stderr.txt -ErrorAction SilentlyContinue) -join "`n"
+            if ($log -match "127\.0\.0\.1:(\d+)") { $base = "http://127.0.0.1:$($Matches[1])"; break }
+            if ($proc.HasExited) { break }
+          }
+          if ($base) {
+            try {
+              $resp = Invoke-RestMethod -Uri "$base/healthz" -TimeoutSec 3
+              Write-Host "/healthz OK: $($resp | ConvertTo-Json -Compress)"
+            } catch { Write-Host "healthz probe failed (advisory): $_" }
+          } else {
+            Write-Host "no PORT observed (likely headless runner) — advisory only"
+          }
+          if ($proc -and -not $proc.HasExited) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
