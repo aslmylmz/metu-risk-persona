@@ -63,6 +63,13 @@ quickstart
 
 ```{toctree}
 :maxdepth: 2
+:caption: Standalone desktop app
+
+standalone/quickstart
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: The task & engine
 
 task_design
