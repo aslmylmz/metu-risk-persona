@@ -6,16 +6,26 @@ import { defaultHazard } from "./familyParams";
 describe("defaultHazard", () => {
   it("produces a spec tagged with the requested family for every family", () => {
     for (const family of HAZARD_FAMILIES) {
-      expect(defaultHazard(family, 32).family).toBe(family);
+      const spec = defaultHazard(family, 10);
+      expect(spec.family).toBe(family);
     }
   });
 
-  it("defaults scalar params from FAMILY_PARAMS", () => {
-    const h = defaultHazard("logistic", 32);
-    if (h.family !== "logistic") throw new Error("wrong family");
-    expect(h.h_max).toBe(0.9);
-    expect(h.midpoint).toBe(16);
-    expect(h.steepness).toBe(0.3);
+  it("adds the correct scalar defaults", () => {
+    // logistic is a good test case: it has 3 scalar params
+    const spec = defaultHazard("logistic", 10) as any;
+    expect(spec.family).toBe("logistic");
+    expect(spec.h_max).toBe(0.9);
+    expect(spec.midpoint).toBe(16);
+    expect(spec.steepness).toBe(0.3);
+  });
+
+  it("handles empty scalar params correctly", () => {
+    const spec = defaultHazard("dynamic", 10);
+    expect(spec).toEqual({ family: "dynamic" });
+    
+    const spec2 = defaultHazard("lejuez", 10);
+    expect(spec2).toEqual({ family: "lejuez" });
   });
 
   it("seeds the array families well-formed against maxPumps", () => {

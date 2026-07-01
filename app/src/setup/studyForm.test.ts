@@ -18,7 +18,7 @@ describe("setColorHazardFamily", () => {
 
   it("does not mutate the input config", () => {
     setColorHazardFamily(DEFAULT_STUDY, 1, "constant");
-    expect(DEFAULT_STUDY.colors[1].hazard).toEqual({ family: "linear" });
+    expect(DEFAULT_STUDY.colors[1].hazard).toEqual({ family: "dynamic" });
   });
 });
 

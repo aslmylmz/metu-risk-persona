@@ -38,11 +38,15 @@ export function App() {
   // Study Setup (issue 14). Issue 15 adds the live EV preview alongside the form;
   // the active study defaults to the validated 128/32/8 linear config.
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", paddingBottom: "64px" }}>
       <StudySetup config={config} onChange={setConfig} />
       <EvPreview config={config} />
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: 16 }}>
-        <button type="button" onClick={() => setMode("run")}>
+      <div style={{ maxWidth: 720, width: "100%", margin: "0 auto", padding: "0 16px", marginTop: "32px", display: "flex", justifyContent: "flex-end" }}>
+        <button 
+          type="button" 
+          onClick={() => setMode("run")}
+          style={{ background: "#10b981", borderColor: "#059669", color: "#fff", fontSize: "1.125rem", padding: "12px 32px", borderRadius: "8px", fontWeight: 600 }}
+        >
           Start run →
         </button>
       </div>

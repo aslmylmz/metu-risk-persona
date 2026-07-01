@@ -22,6 +22,13 @@ export async function loadStudy(): Promise<string | null> {
   return await invoke<string>("read_study_file", { path: selected });
 }
 
+/** Prompt the user to select an output directory via native dialog. */
+export async function selectOutputDir(): Promise<string | null> {
+  const selected = await open({ multiple: false, directory: true });
+  if (typeof selected !== "string") return null;
+  return selected;
+}
+
 /** Toggle the window between fullscreen (kiosk) and windowed; returns the new state. */
 export async function toggleFullscreen(): Promise<boolean> {
   const win = getCurrentWindow();

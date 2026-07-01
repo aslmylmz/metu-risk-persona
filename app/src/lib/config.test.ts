@@ -9,7 +9,7 @@ describe("DEFAULT_STUDY", () => {
       ["teal", 32, 10],
       ["orange", 8, 10],
     ]);
-    expect(DEFAULT_STUDY.colors.every((c) => c.hazard.family === "linear")).toBe(true);
+    expect(DEFAULT_STUDY.colors.every((c) => c.hazard.family === "dynamic")).toBe(true);
   });
 
   it("mirrors the default study's top-level fields", () => {
@@ -38,13 +38,13 @@ describe("HAZARD_FAMILIES", () => {
         "constant",
         "exponential",
         "gompertz",
-        "linear",
+        "dynamic",
         "logistic",
         "lognormal",
+        "lejuez",
         "rayleigh",
         "step",
         "tabular",
-        "uniform",
         "weibull",
       ].sort(),
     );

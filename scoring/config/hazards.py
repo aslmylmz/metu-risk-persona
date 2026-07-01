@@ -22,11 +22,11 @@ def _clamp(x: float) -> float:
     return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
 
 
-class LinearHazard(BaseModel):
+class DynamicHazard(BaseModel):
     """h(k) = k / N. The default model; burst-time is approximately Rayleigh,
     EV-optimum approximately sqrt(N). Reaches certain burst (h = 1) at the cap."""
 
-    family: Literal["linear"] = "linear"
+    family: Literal["dynamic"] = "dynamic"
 
     def hazard_vector(self, n: int) -> list[float]:
         return [k / n for k in range(1, n + 1)]
@@ -42,11 +42,11 @@ class ConstantHazard(BaseModel):
         return [self.p] * n
 
 
-class UniformHazard(BaseModel):
+class LejuezHazard(BaseModel):
     """Classic Lejuez BART: h(k) = 1 / (N - k + 1). Burst point is uniform on
     {1..N}; survival is (N - s)/N, so the EV-optimum sits at N/2."""
 
-    family: Literal["uniform"] = "uniform"
+    family: Literal["lejuez"] = "lejuez"
 
     def hazard_vector(self, n: int) -> list[float]:
         return [1.0 / (n - k + 1) for k in range(1, n + 1)]
@@ -192,9 +192,9 @@ class TabularHazard(BaseModel):
 # Discriminated union over ``family``: a study names a family + params, never code.
 HazardSpec = Annotated[
     Union[
-        LinearHazard,
+        DynamicHazard,
         ConstantHazard,
-        UniformHazard,
+        LejuezHazard,
         RayleighHazard,
         ExponentialHazard,
         WeibullHazard,

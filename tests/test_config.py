@@ -17,14 +17,14 @@ from scoring.config import (
     ConstantHazard,
     ExponentialHazard,
     GompertzHazard,
-    LinearHazard,
+    HazardSpec,
+    DynamicHazard,
     LogisticHazard,
     LognormalHazard,
     RayleighHazard,
     StepHazard,
     TabularHazard,
-    TaskConfig,
-    UniformHazard,
+    LejuezHazard,
     WeibullHazard,
     balloon_curve,
 )
@@ -34,17 +34,13 @@ def _is_increasing(xs):
     return all(b >= a for a, b in zip(xs, xs[1:]))
 
 
-def test_linear_hazard_vector_is_k_over_n():
-    """Linear family: h(k) = k / N over k = 1..N, reaching 1 at the cap."""
-    h = LinearHazard().hazard_vector(8)
-    assert h == pytest.approx([k / 8 for k in range(1, 9)])
-    assert h[-1] == pytest.approx(1.0)
+def test_dynamic_hazard():
+    h = DynamicHazard().hazard_vector(8)
+    assert h == [1 / 8, 2 / 8, 3 / 8, 4 / 8, 5 / 8, 6 / 8, 7 / 8, 1.0]
 
-
-def test_linear_optimum_matches_established_engine():
-    """The numeric optimum of the linear curve reproduces the validated result:
-    N=128 -> s*=11, peak EV ~= 6.46 (same as scoring.bart._compute_ev_optimal)."""
-    curve = balloon_curve(LinearHazard().hazard_vector(128), reward_per_pump=1.0)
+    # EV max for N=128 should be at pump 11
+    # Check it using the curve precomputation
+    curve = balloon_curve(DynamicHazard().hazard_vector(128), reward_per_pump=1.0)
     assert curve.optimum == 11
     assert curve.optimal_ev == pytest.approx(6.46, abs=0.01)
 
@@ -57,7 +53,7 @@ def test_color_profile_curve_uses_its_cap():
         display_hex="#14b8a6",
         max_pumps=32,
         trials=10,
-        hazard=LinearHazard(),
+        hazard=DynamicHazard(),
     )
     assert teal.curve(reward_per_pump=1.0).optimum == 5
 
@@ -71,14 +67,14 @@ def test_default_config_reproduces_established_optima():
 def test_linear_curve_agrees_with_existing_engine(n):
     """The config's linear curve matches scoring.bart for both s* and peak EV."""
     s_engine, ev_engine = _compute_ev_optimal(n)
-    curve = balloon_curve(LinearHazard().hazard_vector(n), reward_per_pump=1.0)
+    curve = balloon_curve(DynamicHazard().hazard_vector(n), reward_per_pump=1.0)
     assert curve.optimum == s_engine
     assert curve.optimal_ev == pytest.approx(ev_engine)
 
 
 def test_optimum_is_invariant_to_reward():
     """reward_per_pump scales EV uniformly, so it must not move the optimum."""
-    h = LinearHazard().hazard_vector(64)
+    h = DynamicHazard().hazard_vector(64)
     cheap = balloon_curve(h, reward_per_pump=0.25)
     rich = balloon_curve(h, reward_per_pump=4.0)
     assert cheap.optimum == rich.optimum
@@ -92,10 +88,9 @@ def test_constant_hazard_optimum_is_inverse_p():
     assert curve.optimum == pytest.approx(10, abs=1)
 
 
-def test_uniform_lejuez_optimum_is_half_n():
-    """Classic Lejuez uniform burst: survival (N-s)/N, EV-optimum at N/2."""
-    curve = balloon_curve(UniformHazard().hazard_vector(64), reward_per_pump=1.0)
-    assert curve.optimum == 32
+def test_lejuez_hazard():
+    curve = balloon_curve(LejuezHazard().hazard_vector(64), reward_per_pump=1.0)
+    assert curve.optimum == 32  # standard property of the classic BART
     assert curve.hazard[-1] == pytest.approx(1.0)
 
 
@@ -211,9 +206,9 @@ def test_hazard_spec_is_selected_by_family_tag():
             "label": "X",
             "display_hex": "#ffffff",
             "max_pumps": 64,
-            "trials": 5,
-            "hazard": {"family": "uniform"},
+            "trials": 10,
+            "hazard": {"family": "lejuez"},
         }
     )
-    assert isinstance(cp.hazard, UniformHazard)
+    assert isinstance(cp.hazard, LejuezHazard)
     assert cp.curve(reward_per_pump=1.0).optimum == 32

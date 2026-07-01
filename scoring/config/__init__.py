@@ -1,44 +1,50 @@
-"""Configurable task definition: a single source of truth for the BART.
+"""Domain models for BART configuration.
 
-``TaskConfig`` drives both how balloons burst (the task) and where the
-EV-optimum sits (scoring), so the two cannot disagree.
+The `TaskConfig` is the single source of truth for a session, capturing everything
+needed to administer and score the task: color profiles, reward, and the specific
+hazard models.
+
+These classes use `pydantic` to provide strict runtime validation. They are
+designed to be loaded from `study.json` presets.
 """
-
-from __future__ import annotations
 
 from scoring.config.curve import BalloonCurve, balloon_curve
 from scoring.config.hazards import (
     ConstantHazard,
     ExponentialHazard,
+    DynamicHazard,
     GompertzHazard,
     HazardSpec,
-    LinearHazard,
     LogisticHazard,
     LognormalHazard,
     RayleighHazard,
     StepHazard,
     TabularHazard,
-    UniformHazard,
+    LejuezHazard,
     WeibullHazard,
 )
 from scoring.config.task_config import DEFAULT_TASK_CONFIG, ColorProfile, TaskConfig
 
 __all__ = [
-    "DEFAULT_TASK_CONFIG",
-    "BalloonCurve",
+    # Main domain entities
+    "TaskConfig",
     "ColorProfile",
+    "DEFAULT_TASK_CONFIG",
+    # Specific hazard families
     "ConstantHazard",
     "ExponentialHazard",
+    "DynamicHazard",
     "GompertzHazard",
-    "HazardSpec",
-    "LinearHazard",
     "LogisticHazard",
     "LognormalHazard",
     "RayleighHazard",
     "StepHazard",
     "TabularHazard",
-    "TaskConfig",
-    "UniformHazard",
+    "LejuezHazard",
     "WeibullHazard",
+    # Precomputed math
+    "BalloonCurve",
     "balloon_curve",
+    # Discriminated union type
+    "HazardSpec",
 ]

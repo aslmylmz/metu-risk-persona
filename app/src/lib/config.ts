@@ -10,8 +10,8 @@
 
 // ── Hazard families (discriminated union on `family`; mirrors hazards.py) ──────
 
-export interface LinearHazard {
-  family: "linear";
+export interface DynamicHazard {
+  family: "dynamic";
 }
 
 export interface ConstantHazard {
@@ -19,8 +19,8 @@ export interface ConstantHazard {
   p: number;
 }
 
-export interface UniformHazard {
-  family: "uniform";
+export interface LejuezHazard {
+  family: "lejuez";
 }
 
 export interface RayleighHazard {
@@ -69,9 +69,9 @@ export interface TabularHazard {
 }
 
 export type HazardSpec =
-  | LinearHazard
+  | DynamicHazard
   | ConstantHazard
-  | UniformHazard
+  | LejuezHazard
   | RayleighHazard
   | ExponentialHazard
   | WeibullHazard
@@ -88,9 +88,9 @@ export type HazardFamily = HazardSpec["family"];
  * The `Record<HazardFamily, true>` makes a family added to the union but omitted
  * here a compile-time error (a missing key fails `tsc`). */
 const HAZARD_FAMILY_SET: Record<HazardFamily, true> = {
-  linear: true,
+  dynamic: true,
   constant: true,
-  uniform: true,
+  lejuez: true,
   rayleigh: true,
   exponential: true,
   weibull: true,
@@ -126,19 +126,19 @@ export interface TaskConfig {
   colors: ColorProfile[];
 }
 
-/** The validated default study: the original 128/32/8 linear hazard, $0.25/pump.
+/** The validated default study: the original 128/32/8 dynamic hazard, $0.25/pump.
  * Mirrors `scoring.config.DEFAULT_TASK_CONFIG` so the app boots usable before any
  * editing and downstream issues (14–16) have a known-good starting config. */
 export const DEFAULT_STUDY: TaskConfig = {
   schema_version: "1.0",
-  title: "Dynamic Hazard Rate BART (default linear study)",
+  title: "Dynamic Hazard Rate BART (default dynamic study)",
   language: "en",
   reward_per_pump: 0.25,
   seed: null,
   output_dir: ".",
   colors: [
-    { name: "purple", label: "Purple", display_hex: "#7c3aed", max_pumps: 128, trials: 10, hazard: { family: "linear" } },
-    { name: "teal", label: "Teal", display_hex: "#14b8a6", max_pumps: 32, trials: 10, hazard: { family: "linear" } },
-    { name: "orange", label: "Orange", display_hex: "#f97316", max_pumps: 8, trials: 10, hazard: { family: "linear" } },
+    { name: "purple", label: "Purple", display_hex: "#7c3aed", max_pumps: 128, trials: 10, hazard: { family: "dynamic" } },
+    { name: "teal", label: "Teal", display_hex: "#14b8a6", max_pumps: 32, trials: 10, hazard: { family: "dynamic" } },
+    { name: "orange", label: "Orange", display_hex: "#f97316", max_pumps: 8, trials: 10, hazard: { family: "dynamic" } },
   ],
 };

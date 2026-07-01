@@ -12,9 +12,9 @@ import pytest
 from scoring.bart import score_bart
 from scoring.config import (
     ColorProfile,
-    LinearHazard,
+    DynamicHazard,
     TaskConfig,
-    UniformHazard,
+    LejuezHazard,
 )
 from tests.test_scoring import optimal_session
 
@@ -28,16 +28,16 @@ def _config(purple_hazard, reward=0.25):
             ColorProfile(name="purple", label="P", display_hex="#7c3aed",
                          max_pumps=128, trials=10, hazard=purple_hazard),
             ColorProfile(name="teal", label="T", display_hex="#14b8a6",
-                         max_pumps=32, trials=10, hazard=LinearHazard()),
+                         max_pumps=32, trials=10, hazard=DynamicHazard()),
             ColorProfile(name="orange", label="O", display_hex="#f97316",
-                         max_pumps=8, trials=10, hazard=LinearHazard()),
+                         max_pumps=8, trials=10, hazard=DynamicHazard()),
         ],
     )
 
 
 def test_score_bart_uses_config_optima():
     """Switching purple to the uniform (Lejuez) hazard moves its optimum to N/2."""
-    metrics = score_bart(optimal_session(), config=_config(UniformHazard()))
+    metrics = score_bart(optimal_session(), config=_config(LejuezHazard()))
     assert metrics.ev_optimal_stops["purple"] == 64   # uniform N=128 -> N/2
     assert metrics.ev_optimal_stops["teal"] == 5       # unchanged linear
     assert metrics.ev_optimal_stops["orange"] == 2
@@ -52,8 +52,8 @@ def test_default_config_still_yields_established_optima():
 def test_money_collected_uses_config_reward():
     """money_collected scales with reward_per_pump, not a hardcoded $0.25."""
     events = optimal_session()
-    cheap = score_bart(events, config=_config(LinearHazard(), reward=0.25))
-    rich = score_bart(events, config=_config(LinearHazard(), reward=1.0))
+    cheap = score_bart(events, config=_config(DynamicHazard(), reward=0.25))
+    rich = score_bart(events, config=_config(DynamicHazard(), reward=1.0))
     # 10 balloons/color collected at 11/5/2 -> 180 banked pumps.
     assert cheap.money_collected == pytest.approx(45.0)
     assert rich.money_collected == pytest.approx(180.0)

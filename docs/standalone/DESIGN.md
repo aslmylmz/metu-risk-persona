@@ -114,7 +114,7 @@ ColorProfile
   hazard: HazardSpec
 
 HazardSpec  (discriminated union)
-  family: "linear" | "constant" | "power" | "logistic" | "exponential"
+  family: "dynamic" | "constant" | "power" | "logistic" | "exponential"
           | "tabular" | "expression"
   params: { ... }                   # family-specific, validated
   # expression: a sandboxed formula string over k, N (advanced mode)

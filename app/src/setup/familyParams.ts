@@ -21,8 +21,8 @@ export interface ParamField {
 }
 
 export const FAMILY_PARAMS: Record<HazardFamily, ParamField[]> = {
-  linear: [],
-  uniform: [],
+  dynamic: [],
+  lejuez: [],
   constant: [{ key: "p", label: "Burst probability p", kind: "number", default: 0.1, min: 0, max: 1, step: 0.01 }],
   rayleigh: [{ key: "sigma", label: "Scale σ", kind: "number", default: 8, min: 0, step: 0.5 }],
   exponential: [{ key: "rate", label: "Rate λ", kind: "number", default: 0.05, min: 0, step: 0.01 }],

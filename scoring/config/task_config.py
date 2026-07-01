@@ -13,7 +13,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, PrivateAttr
 
 from scoring.config.curve import BalloonCurve, balloon_curve
-from scoring.config.hazards import HazardSpec, LinearHazard
+from scoring.config.hazards import HazardSpec, DynamicHazard
 
 
 class ColorProfile(BaseModel):
@@ -65,9 +65,9 @@ class TaskConfig(BaseModel):
         return {name: curve.optimum for name, curve in self._curves.items()}
 
 
-# The validated default study: the original 128/32/8 linear hazard, $0.25/pump.
+# The validated default study: the original 128/32/8 dynamic hazard, $0.25/pump.
 DEFAULT_TASK_CONFIG = TaskConfig(
-    title="Dynamic Hazard Rate BART (default linear study)",
+    title="Dynamic Hazard Rate BART (default dynamic study)",
     language="en",
     reward_per_pump=0.25,
     colors=[
@@ -77,7 +77,7 @@ DEFAULT_TASK_CONFIG = TaskConfig(
             display_hex="#7c3aed",
             max_pumps=128,
             trials=10,
-            hazard=LinearHazard(),
+            hazard=DynamicHazard(),
         ),
         ColorProfile(
             name="teal",
@@ -85,7 +85,7 @@ DEFAULT_TASK_CONFIG = TaskConfig(
             display_hex="#14b8a6",
             max_pumps=32,
             trials=10,
-            hazard=LinearHazard(),
+            hazard=DynamicHazard(),
         ),
         ColorProfile(
             name="orange",
@@ -93,7 +93,7 @@ DEFAULT_TASK_CONFIG = TaskConfig(
             display_hex="#f97316",
             max_pumps=8,
             trials=10,
-            hazard=LinearHazard(),
+            hazard=DynamicHazard(),
         ),
     ],
 )

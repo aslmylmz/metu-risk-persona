@@ -38,7 +38,7 @@ export function addColor(config: TaskConfig): TaskConfig {
     display_hex: "#888888",
     max_pumps: 32,
     trials: 10,
-    hazard: { family: "linear" },
+    hazard: { family: "dynamic" },
   };
   return { ...config, colors: [...config.colors, color] };
 }

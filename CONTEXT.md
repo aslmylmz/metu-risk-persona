@@ -21,11 +21,11 @@ _Avoid_: "optimal strategy", "best number of pumps"
 ### Platform
 
 **Instrument:**
-The standalone Tauri/FastAPI desktop application that administers BART sessions and scores them locally. It is a generalizable, configurable platform supporting 11 hazard families — including static ones like constant-probability and classic uniform — so researchers can run traditional baselines and replicate classic studies alongside the dynamic-hazard paradigm.
+The standalone Tauri/FastAPI desktop application that administers BART sessions and scores them locally. It is a generalizable, configurable platform supporting 11 hazard families — including static ones like constant-probability and classic Lejuez — so researchers can run traditional baselines and replicate classic studies alongside the dynamic-hazard paradigm.
 _Avoid_: "game", "app" (in formal contexts — "game client" is acceptable for the React component specifically)
 
 **Hazard Family:**
-One of the 11 pluggable burst-probability models (linear, constant, uniform, Rayleigh, exponential, Weibull, Gompertz, logistic, lognormal, step, tabular). A study configuration selects a family and its parameters per color; the family's `hazard_vector(n)` method produces the per-pump conditional hazards.
+One of the 11 pluggable burst-probability models (dynamic, constant, lejuez, Rayleigh, exponential, Weibull, Gompertz, logistic, lognormal, step, tabular). A study configuration selects a family and its parameters per color; the family's `hazard_vector(n)` method produces the per-pump conditional hazards.
 _Avoid_: "explosion model", "burst model"
 
 **Sidecar:**
